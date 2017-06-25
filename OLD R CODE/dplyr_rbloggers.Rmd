@@ -1,0 +1,93 @@
+---
+title: "dplyr r bloggers"
+author: "Steven Futter"
+date: "4/9/2017"
+output: html_document
+---
+
+
+https://www.r-bloggers.com/aggregation-with-dplyr-summarise-and-summarise_each/
+
+
+
+```{r}
+library(dplyr)
+mtcars1 <- mtcars   %>% 
+  tbl_df() %>% 
+  select(cyl , mpg, disp)
+
+mtcars1
+```
+
+
+# CASE 1: apply 1 function to 1 variable
+```{r}
+
+# without group
+mtcars1 %>% 
+  summarise (mean_mpg = mean(mpg))
+## Source: local data frame [1 x 1]
+## 
+##   mean_mpg
+##      (dbl)
+## 1 20.09062
+
+str(mtcars1)
+
+# with  group
+mtcars1 %>% 
+  group_by(cyl) %>% 
+  summarise (mean_mpg = mean(mpg))
+## Source: local data frame [3 x 2]
+## 
+##     cyl mean_mpg
+##   (dbl)    (dbl)
+## 1     4 26.66364
+## 2     6 19.74286
+## 3     8 15.10000
+
+
+
+#We could use function summarise_each() as well but, its usage results in a loss of clarity.
+
+# without group
+mtcars1 %>% 
+  summarise_each (funs(mean) , mean_mpg = mpg)
+## Source: local data frame [1 x 1]
+## 
+##   mean_mpg
+##      (dbl)
+## 1 20.09062
+# with  group
+mtcars1 %>% 
+  group_by(cyl) %>% 
+  summarise_each (funs(mean) , mean_mpg = mpg)
+## Source: local data frame [3 x 2]
+## 
+##     cyl mean_mpg
+##   (dbl)    (dbl)
+## 1     4 26.66364
+## 2     6 19.74286
+## 3     8 15.10000
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

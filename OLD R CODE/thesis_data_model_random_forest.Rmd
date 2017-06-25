@@ -1,0 +1,239 @@
+---
+title: "thesis random forest"
+author: "Steven Futter"
+date: "5/7/2017"
+output: html_document
+---
+
+---
+title: "time-series forecasting"
+author: "Steven Futter"
+date: "5/6/2017"
+output: html_document
+---
+
+
+NOtes: 
+given that the ex post multiple linear regression variable selection methods yield small MAE's and the ex ante forecast quite large we have confirmed that the challenge here is to ensure that we can accurately forecast the future values for each predictor so that the multiple linear regression can be used to predict the response at a future hour of the school day.
+
+Let's look at using an ARIMA model to predict the predictor variables at intervals throughout the day, then use those values for inputs into the multiple linear regression models already derived in the thesis_data_model.Rmd tab. 
+
+
+https://stats.stackexchange.com/questions/125909/forecast-using-arima-models
+
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+
+df$Date = as.Date(df$Date)
+
+df.train = subset(df, Date <= '2013-05-28')
+df.test  = subset(df, Date > '2013-05-28')
+
+head(df.train)
+tail(df.train)
+
+head(df.test)
+tail(df.test)
+
+dim(df.train)
+dim(df.test)
+
+df.train = df.train %>% dplyr::select(Date:lag.3.WSPD)
+df.test  = df.test  %>% dplyr::select(Date:lag.3.WSPD)
+
+
+```
+
+# START RANDOM FOREST HERE
+https://cran.r-project.org/web/packages/randomForest/randomForest.pdf
+
+Use the random forest to predict the future levels of school hour pollutants and meteorological variables.
+
+Goal: need to be able to predict the level of pollution at different intervals throughout the day...
+
+
+```{r}
+library(randomForest)
+set.seed(1)
+
+# get columns to which can apply ARIMA model first
+df1 = df %>% dplyr::select(NO:lag.3.WSPD)
+
+# Function that returns Mean Absolute Error
+mae <- function(error)
+{
+    mean(abs(error))
+}
+
+
+mse <- function(error)
+{
+  mean(error^2)
+}
+
+
+# for (i in 1:length(names(df1))) {
+#for (i in 1:length(names(df1))){
+
+response = 'NO2' #names(df1)[i] #'NO'
+
+df.train 
+
+randomForest.fit = randomForest(response~ ., data=df.train, mtry=5, importance=TRUE)
+randomForest.fit
+
+yhat.randomForest.train = predict(randomForest.fit, newdata = df.train)
+randomForest.mse.train = mean((yhat.randomForest.train-df.train$NO2)^2)  # MSE = 0.006340628 (in-sample)
+randomForest.mse.train
+
+yhat.randomForest.test = predict(randomForest.fit, newdata = df.test)
+randomForest.mse.test = mean((yhat.randomForest.test-df.test$NO2)^2)         # MSE = 0.0457037 (out-of-sample)
+randomForest.mse.test
+
+
+
+
+
+# Fit model to train data
+fit  <- Arima(df.train[,c(response)], order = c(arimaorder(arima.model)[1],arimaorder(arima.model)[2],arimaorder(arima.model)[3])) 
+
+# Apply fitted model to the test data
+fit2 <- Arima(df.test[,c(response)], model = fit)        
+
+arima.fitted.test.vals = fitted(fit2)
+
+df.test = data.frame(df.test, arima.fitted.test.vals)
+names(df.test)[names(df.test)=="arima.fitted.test.vals"] <- paste0('arima.fitted.',response)
+
+}
+
+head(df.test)
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+write.csv(df.test, file.path(outfilePath,'results_test_data_all_vars_arima.csv'))
+
+# #################################
+# # MAE and MSE and RMSE etc... ###
+# #################################
+# error = arima.fitted.test.vals - df.test[,c(response)]
+# results = mae(error) 
+# 
+# infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+# outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+# 
+# ############################################################
+# ########################## CAREFUL #########################
+# ############################################################
+# # ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+# # head(results)
+# #write.csv(results, file.path(outfilePath,'results_arima.csv'))
+# # 
+# # # second time through - append to end #
+# # head(results)
+# resultsImport = read.csv(file.path(infilePath,"results_arima.csv"),na.strings=c("NA"," "))
+# resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+# resultsAppended = rbind(resultsImport, results)
+# write.csv(resultsAppended, file.path(outfilePath,'results_arima.csv'))
+#
+#}
+```
+
+
+```{r}
+
+
+
+
+# # STL Decomposition: seasonal decomposition of time series by LOESS
+# # Break down the time series into trend, season, and irregular (noise)
+# ts = ts(df$NO2, start=2010-09-27, frequency=11)
+# fit = stl(ts, s.window='periodic')
+# plot(fit)
+# df
+
+auto.arima(df$NO2) # ARIMA(3,1,4)
+
+# Fit model to train data
+fit <- Arima(df.train$NO2, order = c(3,1,4)) # , xreg = x)
+
+# Fit same model to test data
+fit2 <- Arima(y2, model = fit, xreg = x2)
+
+
+# fit.rhum = auto.arima(df$RHUM)
+# summary(fit.rhum)
+# predict(fit.rhum,n.ahead = 2)
+
+
+# Plot fitted values
+plot(fitted(fit))
+lines(fitted(fit2), col = "blue")
+
+   
+
+
+
+
+# ## without drift
+# fit.m <- arima(df$NO2, order = c(0,1,1))
+# forecast.m <- plot(forecast(fit.m, h=10))
+# # or
+# predict(fit.m, n.ahead = 8)
+
+```
+
+
+```{r}
+library(randomForest)
+set.seed(1)
+
+randomForest.fit = randomForest(NO2~ ., data=df.train, mtry=5, importance=TRUE)
+randomForest.fit
+
+yhat.randomForest.train = predict(randomForest.fit, newdata = df.train)
+randomForest.mse.train = mean((yhat.randomForest.train-df.train$NO2)^2)  # MSE = 0.006340628 (in-sample)
+randomForest.mse.train
+
+yhat.randomForest.test = predict(randomForest.fit, newdata = df.test)
+randomForest.mse.test = mean((yhat.randomForest.test-df.test$NO2)^2)         # MSE = 0.0457037 (out-of-sample)
+randomForest.mse.test
+
+
+predictions=yhat.randomForest.train
+error <- predictions-df.train$NO2
+rmse.train  = rmse(error)   #eltham 4.930543
+mse.train   = mse(error)    #heathrow 203.9976
+mae.train   = mae(error)    #heathrow 11.54623
+r2.train    = r2(df.train$NO2,predictions)   #actual, predicted      #heathrow 0.5780822
+rmsle.train = msaenet.rmsle(df.train$NO2,predictions)   #heathrow 0.6629021
+
+model                   = c('Random Forest')
+type                    = c('Training')
+results.train           = data.frame(model,type,rmse.train, mse.train,mae.train,r2.train,rmsle.train)
+colnames(results.train) = c('Model','Data Set','RMSE','MSE','MAE','R2','RMSLE')
+results.train
+
+# Calculate testing error
+predictions.test = yhat.randomForest.test
+test.error <- predictions.test-df.test$NO2
+rmse.test   = rmse(test.error)   #heathrow 14.57655
+mse.test    = mse(test.error)    #heathrow 212.4759
+mae.test    = mae(test.error)    #heathrow 11.71268
+r2.test     = r2(df.test$NO2,predictions.test) #actual, predicted    #heathrow 0.5161738
+rmsle.test  = msaenet.rmsle(df.test$NO2,predictions.test)   #heathrow 0.696822
+
+type                   = c('Testing')
+results.test           = data.frame(model,type,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data Set','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+results = rbind(results.train,results.test)
+results
+
+
+```

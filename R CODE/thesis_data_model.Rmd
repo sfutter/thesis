@@ -1,0 +1,590 @@
+---
+title: "Thesis Data Modeling"
+author: "Steven Futter"
+date: "4/1/2017"
+output: html_document
+---
+
+What am I trying to achieve here? 
+There are two problems I am trying to solve: 
+1. 8-hour ahead pollution prediction (regression) or **how many hours ahead we can we accurately predict pollution?**
+2. whether or not a particular hour in each day will breach the EU recommended limits (classification)  
+
+# EX ANTE DATA MODELING - MULTIPLE LINEAR REGRESION
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+dim(df)
+
+# #########################################################  9AM  ###########################################################################
+# # This loop through works well for 9AM response time and 1-hour, 2-hour, and 3-hour lagged values
+# response    = 'NO'
+# hour_of_day = 9
+# df1 = processPart1(df)  # convert Date to date format and Year, Month, Week, Day, TimeHoursNum to factors. And Drop Data & Week
+# df2 = processPart2(df1,hour_of_day) # get the correct hour of day
+# df3 = processPart3(df2,response) # get the correct hour of day
+# ############################################################################################################################################
+
+
+#####################################################  10AM ONWARDS  #######################################################################
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+#response    = 'NO'    # NO, NO2, NOX, O3, PM10, PM2.5, AND SO2
+response    = 'NO2'
+#response    = 'NOX'
+#response    = 'O3'
+#response    = 'PM10'
+#response    = 'PM2.5'
+#response    = 'SO2'
+
+hour_of_day = 9                     # this must remain at 9am ALWAYS
+hour_of_response = 16               # this will change dependent upon what hour want response to be
+df1 = processPart1(df)              # convert Date to date format and Year, Month, Week, Day, TimeHoursNum to factors. And Drop Data & Week
+df2 = processPart2(df1,hour_of_day) # get the correct hour of day
+df3 = processPart4(df2)             # drop cols of data that include current hour (9am concentration levels) -- leaves lagged variable explanatory vars
+
+df4 = processPart5(df1,response, hour_of_response)    # get the correct hour of day (e.g. 10AM) response values
+df5 = cbind(df4, df3)
+colnames(df5)[1] = response
+
+head(df5)
+
+dim(df2)
+
+
+# Prep the testing data using 70-30 split
+# ```{r}
+######### CAREFUL HERE ##########
+# df = df3  # 9AM ONLY
+df = df5  # 10AM ONWARDS
+#################################
+
+smp.size = floor(0.70 * nrow(df))
+set.seed(123)
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+df.train = df[train,]
+df.test  = df[-train,]
+
+# these vectors are needed for the modeling results rmd
+df.train.y = df[train,c(response)]
+df.test.y  = df[-train,c(response)]
+
+# # Not sure why but it appears that an ID column gets auto added to df.train and df.test - so i remove it here
+# df.train = df.train[,1:length(names(df.train))]
+# df.test  = df.test[,1:length(names(df.test))]
+
+dim(df.train)  
+dim(df.test)   
+
+
+
+###############################################################################################
+# PROJECT 1: PREDICT 9AM POLLUTANT LEVELS USING LAGGED 1-3 HOUR POLLUTANT AND METEO VARIABLES
+###############################################################################################
+
+# Model 1: Multiple Regression Model
+# <!-- # ```{r} -->
+### MODEL 1 Forward:
+y.fullmod = paste0(response,' ~ .')
+fullmod = glm(y.fullmod,data=df.train, family=gaussian)
+summary(fullmod)
+
+y.nothing = paste0(response,' ~ 1')
+nothing <- glm(y.nothing,data=df.train, family=gaussian)
+summary(nothing)
+
+# forwards = step(nothing,scope=list(lower=formula(nothing),upper=formula(fullmod)), direction="forward")
+# formula(forwards)
+# 
+# ### MODEL 1 Backward
+# backwards = step(fullmod) # Backwards selection is the default
+# formula(backwards)
+
+### MODEL 1 Stepwise
+stepwise = step(nothing, list(lower=formula(nothing),upper=formula(fullmod)),direction="both")
+formula(stepwise)
+# <!-- ``` -->
+
+
+
+# SAVE MODEL FITS TO RESULTS
+# ```{r}
+outPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# model1name = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards.RData')
+# model2name = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards.RData')
+model3name = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise.RData')
+
+# saveRDS(forwards, file=file.path(outPath,model1name))
+# saveRDS(backwards,file=file.path(outPath,model2name))
+saveRDS(stepwise, file=file.path(outPath,model3name))
+
+
+
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards.Rdata')
+# modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards.Rdata')
+modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise.Rdata')
+#modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.Rdata')
+#modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.Rdata')
+#modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.Rdata')
+# modelForwardsName
+# modelBackwardsName
+modelStepwiseName
+
+# modelNames = c(modelForwardsName,modelBackwardsName,modelStepwiseName)
+modelNames = c(modelStepwiseName)
+# modelTypes = c('Forward Variable Selection', 'Backward Variable Selection', 'Stepwise Variable Selection')
+modelTypes = c('Stepwise Variable Selection')
+
+# for ( i in 1:3) {
+for ( i in 1:1) {
+
+modelFetch  = modelNames[i]
+model  = readRDS(file.path(modelPath,modelFetch))
+
+modelName   = modelTypes[i]
+yhat.train  = predict(model, newdata=df.train)
+yhat.test   = predict(model, newdata=df.test)
+formula     = as.character(model$formula[3])
+responseVal = as.character(model$formula[2])
+modelAIC    = model$aic
+
+
+train.predictions=yhat.train
+error        = train.predictions-df.train.y
+rmse.train   = rmse(error) 
+mse.train    = mse(error)   
+mae.train    = mae(error)    
+r2.train     = r2(df.train.y,train.predictions)   #actual, predicted      
+rmsle.train  = msaenet.rmsle(df.train.y,train.predictions)   
+
+################################################################## CAREFUL FOR 9AM HERE ##############################################
+# model                   = paste(responseVal,modelName,'Time',hour_of_day)
+modelString               = paste(responseVal,modelName,'Time',hour_of_response)
+######################################################################################################################################
+
+type                    = c('Training')
+results.train           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.train, mse.train,mae.train,r2.train,rmsle.train)
+colnames(results.train) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.train
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+#rmse.test   = rmse(test.error)  
+mse.test    = mse(test.error)   
+mae.test    = mae(test.error)   
+#r2.test     = r2(df.test.y,predictions.test) #actual, predicted   
+#rmsle.test  = msaenet.rmsle(df.test.y,predictions.test)  
+
+type                   = c('Testing')
+results.test           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+results = rbind(results.train,results.test)
+results
+
+infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+
+############################################################
+########################## CAREFUL #########################
+############################################################
+# ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+# head(results)
+# write.csv(results, file.path(outfilePath,'results.csv'))
+
+# # second time through - append to end #
+# head(results)
+# resultsImport = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+# resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+# resultsAppended = rbind(resultsImport, results)
+# write.csv(resultsAppended, file.path(outfilePath,'results.csv'))
+# resultsAppended
+
+}
+
+```
+
+
+# EX POST DATA MODELING - MULTIPLE LINEAR REGRESSION
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+
+#####################################################  10AM ONWARDS  #######################################################################
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+#response    = 'NO'    # NO, NO2, NOX, O3, PM10, PM2.5, AND SO2
+response    = 'NO2'
+#response    = 'NOX'
+#response    = 'O3'
+#response    = 'PM10'
+#response    = 'PM2.5'
+#response    = 'SO2'
+
+hour_of_response = 16                # this will change dependent upon what hour want response to be
+hour_of_day = hour_of_response      # since for expost the hour of response and hour of day data are the same
+df1 = processPart1(df)              # convert Date to date format and Year, Month, Week, Day, TimeHoursNum to factors. And Drop Data & Week
+df2 = processPart2(df1,hour_of_day) # get the correct hour of day
+
+# ex post -- we can keep the current values so comment out this row
+#df3 = processPart4(df2)             # drop cols of data that include current hour (9am concentration levels)
+
+# given that we do not drop the current values this is not needed, but we do need to ensure that the response value is to the left of the other values ... easier to viz. 
+#df4 = processPart5(df1,response, hour_of_response)    # get the correct hour of day (e.g. 10AM) response values
+# ex post -- we can keep the current values so comment out this row
+#df5 = cbind(df4, df3)
+#df5 = cbind(df4, df2)
+
+# drop timehoursnum since this has been made a one factor column
+df3 = processPart7(df2)
+
+df5 = df3
+#colnames(df5)[1] = response
+
+head(df5)
+
+
+# Prep the testing data using 70-30 split
+# ```{r}
+######### CAREFUL HERE ##########
+# df = df3  # 9AM ONLY
+df = df5  # 10AM ONWARDS
+#################################
+
+smp.size = floor(0.70 * nrow(df))
+set.seed(123)
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+df.train = df[train,]
+df.test  = df[-train,]
+
+# these vectors are needed for the modeling results rmd
+df.train.y = df[train,c(response)]
+df.test.y  = df[-train,c(response)]
+
+# # Not sure why but it appears that an ID column gets auto added to df.train and df.test - so i remove it here
+# df.train = df.train[,1:length(names(df.train))]
+# df.test  = df.test[,1:length(names(df.test))]
+
+dim(df.train)  
+dim(df.test)   
+
+###############################################################################################
+# PROJECT 1: PREDICT 9AM POLLUTANT LEVELS USING LAGGED 1-3 HOUR POLLUTANT AND METEO VARIABLES
+###############################################################################################
+
+# Model 1: Multiple Regression Model
+# <!-- # ```{r} -->
+### MODEL 1 Forward:
+y.fullmod = paste0(response,' ~ .')
+fullmod = glm(y.fullmod,data=df.train, family=gaussian)
+summary(fullmod)
+
+y.nothing = paste0(response,' ~ 1')
+nothing <- glm(y.nothing,data=df.train, family=gaussian)
+summary(nothing)
+
+# forwards = step(nothing,scope=list(lower=formula(nothing),upper=formula(fullmod)), direction="forward")
+# formula(forwards)
+# 
+# ### MODEL 1 Backward
+# backwards = step(fullmod) # Backwards selection is the default
+# formula(backwards)
+
+### MODEL 1 Stepwise
+stepwise = step(nothing, list(lower=formula(nothing),upper=formula(fullmod)),direction="both")
+formula(stepwise)
+# <!-- ``` -->
+
+
+
+# Save Part 1 Model: 
+# Note that for future reference the save command accepts multiple objects. For example, the Lasso 
+# model my include cvLasso$lambda.min. 
+# ```{r}
+outPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# model1name = paste0('model_response_',response,'_hour_',hour_of_day,'_forwards.RData')
+# model2name = paste0('model_response_',response,'_hour_',hour_of_day,'_backwards.RData')
+# model3name = paste0('model_response_',response,'_hour_',hour_of_day,'_stepwise.RData')
+
+# model1name = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.RData')
+# model2name = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.RData')
+model3name = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.RData')
+
+# saveRDS(forwards, file=file.path(outPath,model1name))
+# saveRDS(backwards,file=file.path(outPath,model2name))
+saveRDS(stepwise, file=file.path(outPath,model3name))
+
+
+
+# SAVE MODEL FITS TO RESULTS TABLE
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.Rdata')
+# modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.Rdata')
+modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.Rdata')
+
+# modelNames = c(modelForwardsName,modelBackwardsName,modelStepwiseName)
+modelNames = c(modelStepwiseName)
+# modelTypes = c('Forward Variable Selection (Ex Post)', 'Backward Variable Selection (Ex Post)', 'Stepwise Variable Selection (Ex Post)')
+modelTypes = c('Stepwise Variable Selection (Ex Post)')
+
+for ( i in 1:1) {
+
+modelFetch  = modelNames[i]
+model  = readRDS(file.path(modelPath,modelFetch))
+
+modelName   = modelTypes[i]
+yhat.train  = predict(model, newdata=df.train)
+yhat.test   = predict(model, newdata=df.test)
+formula     = as.character(model$formula[3])
+responseVal = as.character(model$formula[2])
+modelAIC    = model$aic
+
+train.predictions=yhat.train
+error        = train.predictions-df.train.y
+rmse.train   = rmse(error) 
+mse.train    = mse(error)   
+mae.train    = mae(error)    
+r2.train     = r2(df.train.y,train.predictions)   #actual, predicted      
+rmsle.train  = msaenet.rmsle(df.train.y,train.predictions)   
+
+################################################################## CAREFUL FOR 9AM HERE ##############################################
+# model                   = paste(responseVal,modelName,'Time',hour_of_day)
+modelString               = paste(responseVal,modelName,'Time',hour_of_response)
+######################################################################################################################################
+
+type                    = c('Training')
+results.train           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.train, mse.train,mae.train,r2.train,rmsle.train)
+colnames(results.train) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.train
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+rmse.test   = rmse(test.error)  
+mse.test    = mse(test.error)   
+mae.test    = mae(test.error)   
+r2.test     = r2(df.test.y,predictions.test) #actual, predicted   
+rmsle.test  = msaenet.rmsle(df.test.y,predictions.test)  
+
+type                   = c('Testing')
+results.test           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+results = rbind(results.train,results.test)
+results
+
+infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+
+############################################################
+########################## CAREFUL #########################
+############################################################
+# ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+# head(results)
+# write.csv(results, file.path(outfilePath,'results.csv'))
+
+# second time through - append to end #
+# head(results)
+resultsImport = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+resultsAppended = rbind(resultsImport, results)
+write.csv(resultsAppended, file.path(outfilePath,'results.csv'))
+resultsAppended
+
+}
+
+```
+
+
+
+
+<!-- ############################################################################################### -->
+<!-- PROJECT 2: PREDICT 9AM POLLUTANT LEVELS USING LAGGED 1-3 HOUR VARIABLES AND CURRENT LEVELS OF METEO VARS. I.E. ASSUME WE USE THE PREDICTED FORECAST PROVIDED BY GOVERNTMENT -- THIS IS NOT REALISTIC HOWEVER. E.G. RELATIVE HUMIDITY AND SOLAR RADIATION ARENT USUALLY FORECASTED EACH MORNING BY GOVT?? ARE THEY?? -->
+<!-- ############################################################################################### -->
+
+
+
+
+<!-- # MODEL 2 - RANDOM FOREST -->
+<!-- https://cran.r-project.org/web/packages/randomForest/randomForest.pdf -->
+
+<!-- ```{r} -->
+<!-- library(randomForest) -->
+<!-- set.seed(1) -->
+
+<!-- randomForest.fit = randomForest(NO2~ ., data=df.train, mtry=5, importance=TRUE) -->
+<!-- randomForest.fit -->
+
+<!-- yhat.randomForest.train = predict(randomForest.fit, newdata = df.train) -->
+<!-- randomForest.mse.train = mean((yhat.randomForest.train-df.train$NO2)^2)  # MSE = 0.006340628 (in-sample) -->
+<!-- randomForest.mse.train -->
+
+<!-- yhat.randomForest.test = predict(randomForest.fit, newdata = df.test) -->
+<!-- randomForest.mse.test = mean((yhat.randomForest.test-df.test$NO2)^2)         # MSE = 0.0457037 (out-of-sample) -->
+<!-- randomForest.mse.test -->
+
+
+<!-- predictions=yhat.randomForest.train -->
+<!-- error <- predictions-df.train$NO2 -->
+<!-- rmse.train  = rmse(error)   #eltham 4.930543 -->
+<!-- mse.train   = mse(error)    #heathrow 203.9976 -->
+<!-- mae.train   = mae(error)    #heathrow 11.54623 -->
+<!-- r2.train    = r2(df.train$NO2,predictions)   #actual, predicted      #heathrow 0.5780822 -->
+<!-- rmsle.train = msaenet.rmsle(df.train$NO2,predictions)   #heathrow 0.6629021 -->
+
+<!-- model                   = c('Random Forest') -->
+<!-- type                    = c('Training') -->
+<!-- results.train           = data.frame(model,type,rmse.train, mse.train,mae.train,r2.train,rmsle.train) -->
+<!-- colnames(results.train) = c('Model','Data Set','RMSE','MSE','MAE','R2','RMSLE') -->
+<!-- results.train -->
+
+<!-- # Calculate testing error -->
+<!-- predictions.test = yhat.randomForest.test -->
+<!-- test.error <- predictions.test-df.test$NO2 -->
+<!-- rmse.test   = rmse(test.error)   #heathrow 14.57655 -->
+<!-- mse.test    = mse(test.error)    #heathrow 212.4759 -->
+<!-- mae.test    = mae(test.error)    #heathrow 11.71268 -->
+<!-- r2.test     = r2(df.test$NO2,predictions.test) #actual, predicted    #heathrow 0.5161738 -->
+<!-- rmsle.test  = msaenet.rmsle(df.test$NO2,predictions.test)   #heathrow 0.696822 -->
+
+<!-- type                   = c('Testing') -->
+<!-- results.test           = data.frame(model,type,rmse.test, mse.test,mae.test,r2.test,rmsle.test) -->
+<!-- colnames(results.test) = c('Model','Data Set','RMSE','MSE','MAE','R2','RMSLE') -->
+<!-- results.test -->
+
+<!-- results = rbind(results.train,results.test) -->
+<!-- results -->
+
+
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- # EXPORT THE DATA - RANDOM FOREST -->
+<!-- outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS") -->
+<!-- dfExport = as.data.frame(cbind(predictions.test,df.test)) -->
+<!-- class(dfExport) -->
+<!-- head(dfExport) -->
+<!-- dfExport -->
+<!-- write.csv(dfExport, file.path(outfilePath,'greenwich_eltham_no2_rf.csv')) -->
+<!-- ``` -->
+
+
+
+
+
+
+
+
+
+<!-- #ARIMA MODEL - FIGURE OUT WHERE I CAN INCLUDE SMOETHING FROM ARIMA -->
+<!-- #See canvas: Discussion D.7: (See Alt Disc for 2017) Apply ARIMA to Your Data -->
+<!-- #https://canvas.northwestern.edu/courses/45716/discussion_topics/268882?module_item_id=570359 -->
+
+
+
+
+
+
+
+
+
+
+<!-- # MODEL 3: ANN using H2O - multinomial classification -->
+
+<!-- http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/index.html -->
+<!-- Useful tutorial: https://github.com/h2oai/h2o-tutorials/tree/master/tutorials/deeplearning -->
+
+<!-- ```{r} -->
+<!-- # The following two commands remove any previously installed H2O packages for R. -->
+<!-- if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) } -->
+<!-- if ("h2o" %in% rownames(installed.packages())) { remove.packages("h2o") } -->
+
+<!-- # Next, we download packages that H2O depends on. -->
+<!-- if (! ("methods" %in% rownames(installed.packages()))) { install.packages("methods") } -->
+<!-- if (! ("statmod" %in% rownames(installed.packages()))) { install.packages("statmod") } -->
+<!-- if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") } -->
+<!-- if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") } -->
+<!-- if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") } -->
+<!-- if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") } -->
+<!-- if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") } -->
+<!-- if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") } -->
+
+<!-- # Now we download, install and initialize the H2O package for R. -->
+<!-- install.packages("h2o", type="source", repos=(c("http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/R"))) -->
+<!-- library(h2o) -->
+<!-- localH2O = h2o.init(nthreads=-1) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- library(h2o) -->
+<!-- h2o.init() -->
+
+<!-- df.train.hex <- as.h2o(df.train) -->
+<!-- df.test.hex  <- as.h2o(df.test) -->
+
+<!-- # Training: For some reason when i run as.h2o a new line gets added in row 1 - so i remove it below. -->
+<!-- dim(df.train) -->
+<!-- dim(df.train.hex) # 124 columns so i choose 62 nodes. -->
+<!-- df.train.hex = df.train.hex[2:nrow(df.train.hex),] -->
+<!-- head(df.train.hex) -->
+
+<!-- # I use a rule of thumb that the hidden nodes should be half as columns -->
+<!-- colcount    = dim(df.train.hex)[2] -->
+<!-- hiddencount = round(dim(df.train.hex)[2]/2)  # need to run the neural network with half as many hidden nodes as input nodes -->
+<!-- df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, hidden=c(hiddencount), variable_importances = TRUE) -->
+<!-- summary(df.train.dl) -->
+
+<!-- # Testing: As above for the training data. Line added from as.h2o needs to be removed from row 1.  -->
+<!-- dim(df.test) -->
+<!-- dim(df.test.hex) -->
+<!-- df.test.hex = df.test.hex[2:nrow(df.test.hex),]   -->
+
+<!-- # make a prediction here -->
+<!-- predictions <- h2o.predict(df.train.dl, df.train.hex) -->
+<!-- predictions -->
+
+<!-- predictions.test <- h2o.predict(df.train.dl, df.test.hex) -->
+<!-- predictions.test -->
+
+<!-- # TRAINING: evaluate the quality of prediction here -->
+<!-- df.train.mse = mean((predictions-df.train.hex$NO2)^2)  -->
+<!-- df.train.mse         # 23.48436 MSE -> 24.31025 -->
+
+<!-- # TESTING: evaluate the quality of the prediction using the test data set: -->
+<!-- df.test.mse = mean((predictions.test-df.test.hex$NO2)^2)  -->
+<!-- df.test.mse          # 47.01364 MSE -> 36.5444 -->
+<!-- ``` -->
+
+
+
+
+<!-- ```{r} -->
+<!-- # EXPORT THE DATA -->
+<!-- outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS") -->
+<!-- dfExport = as.data.frame(h2o.cbind(predictions.test,df.test.hex)) -->
+<!-- class(dfExport) -->
+<!-- head(dfExport) -->
+<!-- dfExport -->
+<!-- write.csv(dfExport, file.path(outfilePath,'greenwich_eltham_no2_ann.csv')) -->
+
+<!-- # RETRIEVE VARIABLE IMPORTANCES -->
+<!-- h2o.varimp(df.train.dl)  # need to figure out how to create deviance and var importance plots in same manner as working group. -->
+<!-- ``` -->
+
+
+

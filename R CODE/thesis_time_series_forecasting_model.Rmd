@@ -1,0 +1,159 @@
+---
+title: "time-series forecasting"
+author: "Steven Futter"
+date: "5/6/2017"
+output: html_document
+---
+
+
+Notes: 
+given that the ex post multiple linear regression variable selection methods yield small MAE's and the ex ante forecast quite large we have confirmed that the challenge here is to ensure that we can accurately forecast the future values for each predictor so that the multiple linear regression can be used to predict the response at a future hour of the school day.
+
+Let's look at using an ARIMA model to predict the predictor variables at intervals throughout the day, then use those values for inputs into the multiple linear regression models already derived in the thesis_data_model.Rmd tab. 
+
+
+https://stats.stackexchange.com/questions/125909/forecast-using-arima-models
+
+```{r}
+library(dplyr)
+library(forecast)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+
+df$Date = as.Date(df$Date)
+
+df.train = subset(df, Date <= '2013-05-28')
+df.test  = subset(df, Date > '2013-05-28')
+
+head(df.train)
+tail(df.train)
+
+head(df.test)
+tail(df.test)
+
+dim(df.train)
+dim(df.test)
+
+
+```
+
+# START ARIMA HERE
+```{r}
+# get columns to which can apply ARIMA model first
+df1 = df %>% dplyr::select(NO:lag.3.WSPD)
+
+# Function that returns Mean Absolute Error
+mae <- function(error)
+{
+    mean(abs(error))
+}
+
+
+mse <- function(error)
+{
+  mean(error^2)
+}
+
+
+# for (i in 1:length(names(df1))) {
+for (i in 1:length(names(df1))){
+
+  
+#response = names(df1)[i] #'NO'#
+response = names(df1)[i] #'NO'
+
+arima.model = auto.arima(df.train[,c(response)]) 
+
+# Fit model to train data
+fit  <- Arima(df.train[,c(response)], order = c(arimaorder(arima.model)[1],arimaorder(arima.model)[2],arimaorder(arima.model)[3])) 
+
+# Apply fitted model to the test data
+fit2 <- Arima(df.test[,c(response)], model = fit)        
+
+arima.fitted.test.vals = fitted(fit2)
+
+df.test = data.frame(df.test, arima.fitted.test.vals)
+names(df.test)[names(df.test)=="arima.fitted.test.vals"] <- paste0('arima.fitted.',response)
+
+}
+
+head(df.test)
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+write.csv(df.test, file.path(outfilePath,'results_test_data_all_vars_arima.csv'))
+
+head(df.test)
+
+```
+
+
+
+
+
+# START $$$$$ ARIMAX    ##### HERE
+
+```{r}
+# get columns to which can apply ARIMA model first
+df1 = df %>% dplyr::select(NO:lag.3.WSPD)
+
+# Function that returns Mean Absolute Error
+mae <- function(error)
+{
+    mean(abs(error))
+}
+
+
+mse <- function(error)
+{
+  mean(error^2)
+}
+
+#df1
+# for (i in 1:length(names(df1))) {
+#for (i in 4:length(names(df1))){
+for (i in 1:1){
+
+#response = names(df1)[i] #'NO'#
+#response = names(df1)[i] #'NO'
+response = 'NO2'
+
+#regressors = c('NO','NOX')  #,'WSPD','TEMP')
+xreg = df.train[,c('O3')] #,'NOX','TEMP','WDIR','SOLR','RHUM','O3')]   #,'NOX','WSPD'
+
+arima.model = auto.arima(df.train[,c(response)], xreg = xreg)
+arima.model
+# Fit model to train data
+fit  <- Arima(df.train[,c(response)], order = c(arimaorder(arima.model)[1],arimaorder(arima.model)[2],arimaorder(arima.model)[3]))
+
+# Apply fitted model to the test data
+fit2 <- Arima(df.test[,c(response)], model = fit)
+
+arima.fitted.test.vals = fitted(fit2)
+
+df.test = data.frame(df.test, arima.fitted.test.vals)
+names(df.test)[names(df.test)=="arima.fitted.test.vals"] <- paste0('arima.fitted.',response,'.O3')
+
+}
+
+# length(names(df.test))
+# df.test = df.test[,1:63]
+# df.test
+#df.test %>% select(arima.fitted, NO2)
+
+head(df.test)
+error = df.test$arima.fitted.NO2.NO.NOX.TEMP.WDIR.SOLR.RHUM.O3-df.test$NO2
+mae(error)
+
+
+# 5.797346 - NO
+# 8.493557 - NO, NOX
+# 8.493557 - NO, NOX, TEMP, 
+# 8.493557 - ALL
+
+# outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+# write.csv(df.test, file.path(outfilePath,'results_test_data_all_vars_arima.csv'))
+
+```

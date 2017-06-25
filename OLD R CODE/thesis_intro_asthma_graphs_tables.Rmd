@@ -1,0 +1,116 @@
+---
+title: "Thesis Introduction & Asthma Related Figures"
+author: "Steven Futter"
+date: "4/9/2017"
+output: html_document
+---
+
+Here I create some interesting visuals for highlighting trends in asthma related emergency hospital admissions. 
+
+
+```{r}
+library(dplyr)
+library(plyr)
+library(tidyr)
+
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","ASTHMA") # Home path
+df = read.csv(file.path(inPath,"AUK emergency admissions export table.csv"),na.strings=c("NA"," "))
+dim(df)
+str(df)
+head(df)
+unique(df$Country)  #England          Northern Ireland Scotland         UK               Wales 
+
+# Data sourced from the Office for National Statistics
+# https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates/datasets/populationestimatesanalysistool
+country = rep(c('England','Scotland','Wales'),3)
+year    = c('2013','2013','2013','2014','2014','2014','2015','2015','2015')
+population = c(53865817,5327700,3082412,54316618,5347600,3092036,54786327,5373000,3099086)
+ukpop = data.frame(country,year,population)
+ukpop
+
+
+```
+
+
+```{r}
+# Step 1  - reduce to columns that have interest in. 
+cols = c('Year.ending','Country','Adult...child','Asthma.admissions','Sex','Population') # adult / child == 0-14
+colsKeep = which(names(df) %in% cols)
+df = df[,colsKeep]
+dim(df)
+df1 = na.omit(df)
+dim(df1)
+
+str(df1)
+str(ukpop)
+
+# WORKING LINE OF CODE!!!! 
+df2 = df1 %>% 
+  filter(Sex=='All' & (Country=='Scotland' | Country=='Wales' | Country=='England')) %>%
+    group_by(Year.ending, Country) %>% 
+      summarise_each (funs(sum) , SumAdmissions = Asthma.admissions)
+df2
+
+# merge the ukpop and df1 asthma data set
+# 1st: reformat the Year.ending to Year only format
+tmp <- as.Date(df2$Year.ending, format='%m/%d/%y')
+df2$Year.ending = format(tmp,'%Y')
+df2$Year.ending = as.factor(df2$Year.ending)
+colnames(df2) = c('year','country','sumAdmissions')
+df2
+
+df2$country = as.character(df2$country)
+ukpop$country = as.character(ukpop$country)
+df2$year = as.character(df2$year)
+ukpop$year = as.character(ukpop$year)
+
+# merge tables together on two columns
+df3 = inner_join(ukpop,df2, by = c('country','year'))
+df3
+
+# Convert counts to x per 100,000 population
+# E.g. if there are 300 people in wales and the admissions total is 10, then 100k / 300 divides = multiplier. 
+multiplier = 100000 / population
+df3$RatePer100000 = df3$sumAdmissions * multiplier
+
+df3_aggr = df3 %>% select(country,year,RatePer100000) %>% group_by(country) %>% spread(year,RatePer100000)
+colnames(df3_aggr) = c('country','Year2013','Year2014','Year2015')
+df3_aggr
+
+
+library(plotly)
+
+# present yearly breakdown of the three countries Emergency Asthma Admissions 2013-2015
+# x-axis is the country and year
+# y-axis is the 
+p <- plot_ly(df3_aggr, x = ~country, y = ~Year2013, type = 'bar', name = '2013') %>%
+  add_trace(y = ~Year2014, name = '2014') %>%
+  add_trace(y = ~Year2015, name = '2015') %>%
+  layout(yaxis = list(title = 'Rate Per 100,000 Population'), barmode = 'group', title='Emergency Asthma Admissions 2013-2015')
+p
+
+```
+
+
+
+```{r}
+# # PLOT THE GRAPH
+# df2_aggr = df2 %>% group_by(Sex) %>% spread(Year.ending, MeanAdmissions)
+# colnames(df2_aggr) = c('Sex','Year2013','Year2014','Year2015')
+# df2_aggr = data.frame(df2_aggr)
+# df2_aggr
+# 
+
+# library(plotly)
+# 
+# p <- plot_ly(df2_aggr, x = ~Sex, y = ~Year2013, type = 'bar', name = '2013') %>%
+#   add_trace(y = ~Year2014, name = '2014') %>%
+#   add_trace(y = ~Year2015, name = '2015') %>%
+#   layout(yaxis = list(title = 'Count Admissions'), barmode = 'group', title='Emergency Admissions')
+# 
+# p
+
+unique(df$Region)
+```
+
+

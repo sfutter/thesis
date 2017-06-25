@@ -1,0 +1,1076 @@
+---
+title: "Thesis Data Preparation"
+author: "Steven Futter"
+date: "3/30/2017"
+output: html_document
+---
+
+I start by reviewing the Heathrow data set. In the next run **SEE FUNCTION BASED DATA PREP SECTION BELOW ** 
+```{r}
+
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"heathrow_airport_1.csv"),na.strings=c("NA"," "))
+dfb = read.csv(file.path(inPath,"heathrow_airport_2.csv"),na.strings=c("NA"," "))
+
+names(df)
+unique(df$Species)  # Species is where the different field variables are stored. PM10, NO2, etc.
+table(df$Provisional.or.Ratified) 
+```
+
+Use an inner join on each Species recorded timestamp so that pollutant measures at each time are paired to the weather measures at the same time. Also remove all the rows that are NA. 
+```{r}
+df1 = df
+dim(df1)
+names(df1)
+head(df1)
+table(df1$Provisional.or.Ratified, df1$Species)
+
+# repeat for the seocond airport file
+dfb1 = dfb
+dim(dfb1)
+names(dfb1)
+head(dfb1)
+table(dfb1$Provisional.or.Ratified, dfb1$Species)  # there is ONLY provisional vlaues for the weather RAIN, SOLR, TMP, WDIR, WSPD! 
+
+
+# Let's try first taking only the Ratified values
+df1 = df1 %>% filter(df1$Provisional.or.Ratified=='R')
+dfr1 = na.omit(df1)
+unique(dfr1$Species)
+dfr1 = dfr1[,1:4]
+
+# repeast for the second airport file
+dfbp1 = na.omit(dfb1)
+dim(dfbp1)
+unique(dfbp1$Species)
+dfbp1 = dfbp1[,1:4]
+
+CO    = dfr1 %>% filter(Species=="CO")
+NO    = dfr1 %>% filter(Species=="NO")
+NO2   = dfr1 %>% filter(Species=="NO2")
+NOX   = dfr1 %>% filter(Species=="NOX")
+O3    = dfr1 %>% filter(Species=="O3")
+PM10  = dfr1 %>% filter(Species=="PM10")
+
+# second file
+#RAIN  = dfbp1 %>% filter(Species=="RAIN") # this is a 0
+SOLR  = dfbp1 %>% filter(Species=="SOLR")
+TMP   = dfbp1 %>% filter(Species=="TMP")
+WDIR  = dfbp1 %>% filter(Species=="WDIR")
+WSPD  = dfbp1 %>% filter(Species=="WSPD")
+
+
+```
+
+```{r}
+dfr2 = inner_join(CO,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+dfr3 = inner_join(dfr2,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+dfr3 = inner_join(dfr3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+dfr3 = inner_join(dfr3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+dfr3 = inner_join(dfr3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+
+
+#dim(RAIN) # has nothing so excluding
+dim(SOLR)
+dim(TMP)
+dim(WDIR)
+dim(WSPD)
+
+dfbp2 = inner_join(SOLR, TMP,  by = c("ReadingDateTime" = "ReadingDateTime"))
+dfbp3 = inner_join(dfbp2,WDIR,  by = c("ReadingDateTime" = "ReadingDateTime"))
+dfbp3 = inner_join(dfbp3,WSPD, by = c("ReadingDateTime" = "ReadingDateTime"))
+
+head(dfr3)
+dfr4 = dfr3[,c(1,3,4,7,10,13,16)]
+colnames(dfr4) = c("Site","Time","CO","NO2","NOX","O3","PM10")
+head(dfr4)
+dim(dfr4)
+
+# repeat for file 2
+head(dfbp3)
+dfbp4 = dfbp3[,c(3,4,7,10,13)]
+dim(dfbp4)
+colnames(dfbp4) = c("Time","SOLR","TMP","WDIR","WSPD")
+head(dfbp4)
+dim(dfbp4)
+
+
+# in the final step we need to pair up the first file dates with the second...
+heathrow_airport = inner_join(dfr4, dfbp4,  by = c("Time" = "Time"))
+dim(heathrow_airport)
+
+heathrow_airport
+str(heathrow_airport)
+head(heathrow_airport)
+
+
+# Finalize the data set
+dropCols = which(names(heathrow_airport) %in% c('Site'))
+heathrow_airport = heathrow_airport[,-dropCols]
+head(heathrow_airport)
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(heathrow_airport, file.path(outfilePath,'heathrow_airport_hourly.csv'))
+```
+
+
+
+
+
+
+
+
+
+FUNCTION BASED DATA PREP SECTION
+
+1. FUNCTION to remove NA rows
+```{r}
+removeNas = function(df){
+  df = na.omit(df)
+  return(df)
+}
+```
+
+
+<!-- 2. INACTIVE - FUNCTION to remove columns with less than X amount of values -->
+```{r}
+X = 10
+df %>% select_if(function(col) n_distinct(col) > X)
+n_distinct(species)
+
+```
+
+
+3. INACTIVE - AS DOES NOT WORK - FUNCTION to remove species factors that have X (i.e. 0) values
+```{r}
+dropUnusedFactors = function(df){
+  df = df %>% droplevels()
+  return(df)
+}
+```
+
+4. FUNCTION to create new data frame for each Species
+```{r}
+getSpeciesDataFrame = function(df,species){
+  df = df %>% filter(Species==species)
+  return(df)
+}
+```
+
+
+
+Import Raw data tables and librairies
+```{r}
+library(dplyr)
+
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"bexley_slade_green_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"bexley_slade_green_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+
+# Step 1: remove the NAs
+dim(df)   # 526176 6
+df2 = removeNas(df)
+dim(df2)   # 335799 6
+
+# Step 2 - come back to this step - remove unused factor Species
+
+# Step 3: get new data frame for each Species
+#speciesType = c("CO","NO","NO2","NOX","O3","PM10","RAIN","SOLR","TMP","WDIR","WSPD")
+CO   = getSpeciesDataFrame(df2, 'CO')
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+O3   = getSpeciesDataFrame(df2, 'O3')
+PM10 = getSpeciesDataFrame(df2, 'PM10')
+FINE = getSpeciesDataFrame(df2, 'FINE')
+RAIN = getSpeciesDataFrame(df2, 'RAIN')
+SOLR = getSpeciesDataFrame(df2, 'SOLR')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(CO,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+
+dim(df3)   # 7952   41
+
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+
+# Finalize the data set
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y'))
+df4 = df3[,keepCols]
+
+colnames(df4) = c("Site","Time","CO","NO","NO2","NOX","O3","PM10","WDIR","WSPD")
+head(df4)
+dim(df4)
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'bexley_slade_green_hourly.csv'))
+ 
+
+```
+
+
+
+
+Greenwich
+
+Import Raw data tables and librairies
+```{r}
+library(dplyr)
+
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+# df = read.csv(file.path(inPath,"greenwich_eltham_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+# dfb = read.csv(file.path(inPath,"greenwich_eltham_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+# dfc = read.csv(file.path(inPath,"greenwich_eltham_3.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+# df = rbind(df,dfb,dfc)
+
+
+ge.no = read.csv(file.path(inPath,"greenwich_eltham_no_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.no2 = read.csv(file.path(inPath,"greenwich_eltham_no2_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.nox = read.csv(file.path(inPath,"greenwich_eltham_nox_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.o3 = read.csv(file.path(inPath,"greenwich_eltham_o3_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.pm2.5 = read.csv(file.path(inPath,"greenwich_eltham_pm2.5_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.pm10 = read.csv(file.path(inPath,"greenwich_eltham_pm10_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.so2 = read.csv(file.path(inPath,"greenwich_eltham_so2_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+
+ge.bp = read.csv(file.path(inPath,"greenwich_eltham_bp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.rain = read.csv(file.path(inPath,"greenwich_eltham_rain_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+bbw.rain = read.csv(file.path(inPath,"greenwich_eltham_bexley_belvedere_west_rain_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.rhum = read.csv(file.path(inPath,"greenwich_eltham_rhum_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+bbw.rhum = read.csv(file.path(inPath,"greenwich_eltham_bexley_belvedere_west_rhum_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.solr = read.csv(file.path(inPath,"greenwich_eltham_solr_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.temp = read.csv(file.path(inPath,"greenwich_eltham_temp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+bbw.temp = read.csv(file.path(inPath,"greenwich_eltham_bexley_belvedere_west_temp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.wdir = read.csv(file.path(inPath,"greenwich_eltham_wdir_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.wspd = read.csv(file.path(inPath,"greenwich_eltham_wspd_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+
+dim(ge.no)    # all are 78912     6
+dim(ge.no2)
+dim(ge.nox)
+dim(ge.o3)
+dim(bbw.rain)
+
+
+```
+
+
+```{r}
+df1  = full_join(ge.no,ge.no2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.nox,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.o3,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.pm10,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.pm2.5,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.so2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.bp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.rain,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.rain,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.rhum,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.rhum,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.solr,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.temp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.temp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.wdir,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.wspd,       by = c("ReadingDateTime" = "ReadingDateTime"))
+
+dim(df1)  # 78912    86
+head(df1)
+
+
+
+```
+
+```{r}
+names(df1)
+# for full join
+keepCols = which(names(df1) %in% c('Site.x', 'ReadingDateTime',
+                                   'Value.x','Value.y',
+                                   'Value.x.x','Value.y.y',
+                                   'Value.x.x.x','Value.y.y.y',
+                                   'Value.x.x.x.x','Value.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y',
+                                   'Value.x.x.x.x.x.x','Value.y.y.y.y.y.y',
+                                   'Value.x.x.x.x.x.x.x','Value.y.y.y.y.y.y.y', 
+                                   'Value.x.x.x.x.x.x.x.x', 'Value.y.y.y.y.y.y.y.y',
+                                   'Value'))
+
+
+df2 = df1[,keepCols]
+
+df1  = full_join(ge.no,ge.no2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.nox,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.o3,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.pm10,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.pm2.5,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.so2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.bp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.rain,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.rain,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.rhum,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.rhum,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.solr,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.temp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.temp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.wdir,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.wspd,       by = c("ReadingDateTime" = "ReadingDateTime"))
+
+
+colnames(df2) = c("Site","Time","NO","NO2","NOX","O3","PM10","PM2.5","SO2","BP","RAIN.GE","RAIN.BBW","RHUM.GE","RHUM.BBW","SOLR","TEMP.GE","TEMP.BBW","WDIR","WSPD")  #BBW = bexley belvedere west
+head(df2)
+summary(df2)
+
+df2 = mutate(df2, TEMP = ifelse(is.na(TEMP.GE),TEMP.BBW, TEMP.GE))
+df2 = mutate(df2, RAIN = RAIN.BBW)
+df2 = mutate(df2, RHUM = ifelse(is.na(RHUM.GE),RHUM.BBW, RHUM.GE))
+names(df2)
+
+?na.omit
+
+df3 = df2 %>% select(Site,Time,NO,NO2,NOX,O3,PM10,PM2.5,SO2,BP,RAIN,RHUM,SOLR,TEMP,WDIR,WSPD)
+
+df3 %>% filter(RAIN>=0)
+dim(df2)
+df3 = na.omit(df2)
+dim(df3)
+
+df2
+df3
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+#write.csv(df4, file.path(outfilePath,'greenwich_eltham_hourly.csv'))  # left join
+#write.csv(df4, file.path(outfilePath,'greenwich_eltham_full_join_hourly.csv'))
+write.csv(df2, file.path(outfilePath,'greenwich_eltham_with_replace_bexley_rain_temp_rhum_hourly.csv'))
+head(df2)
+
+```
+
+
+
+```{r}
+str(df1)
+tail(df1)
+head(df1)
+summary(df1)
+table(df1$Species)
+unique(df$Species)  # BP    NO    NO2   NOX   O3    PM10  PM2.5 RAIN  RHUM  SOLR  SO2   TMP   WDIR  WSPD 
+table(df$Species, df$Units)
+
+# 'data.frame':	981792 obs. of  6 variables:
+#  $ Site                   : Factor w/ 1 level "GR4": 1 1 1 1 1 1 1 1 1 1 ...
+#  $ Species                : Factor w/ 14 levels "BP","NO","NO2",..: 1 1 1 1 1 1 1 1 1 1 ...
+#  $ ReadingDateTime        : Factor w/ 70128 levels "01/01/2008 00:00",..: 1 2 3 4 5 6 7 8 9 10 ...
+#  $ Value                  : num  NA NA NA NA NA NA NA NA NA NA ...
+#  $ Units                  : chr  "mBar" "mBar" "mBar" "mBar" ...
+#  $ Provisional.or.Ratified: Factor w/ 2 levels "P","R": 1 1 1 1 1 1 1 1 1 1 ...
+#  [1] BP    NO    NO2   NOX   O3    PM10  PM2.5 RAIN  RHUM  SOLR  SO2   TMP   WDIR  WSPD 
+# Levels: BP NO NO2 NOX O3 PM10 PM2.5 RAIN RHUM SOLR SO2 TMP WDIR WSPD
+
+# Step 1: remove the NAs
+removeNas = function(df){
+  df = na.omit(df)
+  return(df)
+}
+
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 981792      6
+# [1] 624159      6
+
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   
+# [1] BP    NO    NO2   NOX   O3    PM10  PM2.5 RAIN  RHUM  SOLR  SO2   TMP   WDIR  WSPD 
+# Levels: BP NO NO2 NOX O3 PM10 PM2.5 RAIN RHUM SOLR SO2 TMP WDIR WSPD
+
+
+# Step 3: get new data frame for each Species
+#speciesType = c("CO","NO","NO2","NOX","O3","PM10","RAIN","SOLR","TMP","WDIR","WSPD")
+getSpeciesDataFrame = function(df,species){
+  df = df %>% filter(Species==species)
+  return(df)
+}
+
+BP    = getSpeciesDataFrame(df2, 'BP')
+NO    = getSpeciesDataFrame(df2, 'NO')
+NO2   = getSpeciesDataFrame(df2, 'NO2')
+NOX   = getSpeciesDataFrame(df2, 'NOX')
+O3    = getSpeciesDataFrame(df2, 'O3')
+PM10  = getSpeciesDataFrame(df2, 'PM10')
+PM2.5 = getSpeciesDataFrame(df2, 'PM2.5')
+RAIN  = getSpeciesDataFrame(df2, 'RAIN')
+RHUM  = getSpeciesDataFrame(df2, 'RHUM')
+SOLR  = getSpeciesDataFrame(df2, 'SOLR')
+SO2   = getSpeciesDataFrame(df2, 'SO2')
+TMP   = getSpeciesDataFrame(df2, 'TMP')
+WDIR  = getSpeciesDataFrame(df2, 'WDIR')
+WSPD  = getSpeciesDataFrame(df2, 'WSPD')
+
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+#    BP    NO   NO2   NOX    O3  PM10 PM2.5  RAIN  RHUM  SOLR   SO2   TMP  WDIR  WSPD 
+# 15405 63301 63298 63299 68882 64306 56691  2864  5991 19211 65687 22940 54782 57502 
+
+# Join the frames together
+# df3  = inner_join(BP,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,PM2.5,   by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+# df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+# RAIN - leaving these out as there is not enough variables..
+# RHUM - leaving these out as there is not enough variables..
+
+# re-doing the above with a full-joing because i can describe then the percentage included for each pollutant.
+df3  = full_join(BP,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,PM2.5,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,RAIN,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,RHUM,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,SO2,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = full_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 11392    56   left join goes to -> 70117    71 with a full join 
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+# Finalize the data set
+head(df3)
+
+# for left join
+# keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+#                                                 'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value.x.x.x.x.x','Value.y.y.y.y.y','Value'))
+
+# for full join
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value.x.x.x.x.x','Value.y.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y','Value.x.x.x.x.x.x','Value.y.y.y.y.y.y',
+                                   'Value.x.x.x.x.x.x.x','Value.y.y.y.y.y.y.y'))
+
+
+df4 = df3[,keepCols]
+
+colnames(df4) = c("Site","Time","BP","NO","NO2","NOX","O3","PM10","PM2.5","RAIN","RHUM","SOLR","SO2","TMP","WDIR","WSPD")  # leaving RAIN and RHUM out
+head(df4)
+
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+#write.csv(df4, file.path(outfilePath,'greenwich_eltham_hourly.csv'))  # left join
+write.csv(df4, file.path(outfilePath,'greenwich_eltham_full_join_hourly.csv'))
+head(df4)
+
+
+
+```
+
+
+
+Camden
+```{r}
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"camden_st_martins_college_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"camden_st_martins_college_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+unique(df$Species)    # NO NO2 NOX RAIN RHUM SOLR TMP WDIR WSPD
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # NO NO2 NOX RAIN RHUM SOLR TMP WDIR WSPD
+
+# Step 3: get new data frame for each Species
+#speciesType = c("CO","NO","NO2","NOX","O3","PM10","RAIN","SOLR","TMP","WDIR","WSPD")
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+RAIN = getSpeciesDataFrame(df2, 'RAIN')
+RHUM = getSpeciesDataFrame(df2, 'RHUM')
+SOLR = getSpeciesDataFrame(df2, 'SOLR')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(NO,NO2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,RAIN,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,RHUM,     by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 17082    46
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+# Finalize the data set
+head(df3)
+
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value'))
+df4 = df3[,keepCols]
+
+colnames(df4) = c("Site","Time","NO","NO2","NOX","RAIN","RHUM","SOLR","TMP","WDIR","WSPD")
+head(df4)
+
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'camden_st_martins_college_hourly.csv'))
+```
+
+
+
+
+
+
+westminster_marylebone_road
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"westminster_marylebone_road_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"westminster_marylebone_road_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+unique(df$Species)    # CO NO NO2 NOX O3 PM10 FINE SO2 TMP WDIR WSPD
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # CO NO NO2 NOX O3 PM10 FINE SO2 TMP WDIR WSPD
+
+# Step 3: get new data frame for each Species
+#speciesType = c("CO","NO","NO2","NOX","O3","PM10","RAIN","SOLR","TMP","WDIR","WSPD")
+CO   = getSpeciesDataFrame(df2, 'CO')
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+O3   = getSpeciesDataFrame(df2, 'O3')
+PM10 = getSpeciesDataFrame(df2, 'PM10')
+FINE = getSpeciesDataFrame(df2, 'FINE')
+SO2  = getSpeciesDataFrame(df2, 'SO2')
+#RAIN = getSpeciesDataFrame(df2, 'RAIN')
+#RHUM = getSpeciesDataFrame(df2, 'RHUM')
+#SOLR = getSpeciesDataFrame(df2, 'SOLR')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(CO,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,FINE,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SO2,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 6216   56
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+# Finalize the data set
+head(df3)
+
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value.x.x.x.x.x','Value.y.y.y.y.y','Value'))
+df4 = df3[,keepCols]
+
+colnames(df4) = c("Site","Time","CO","NO","NO2","NOX","O3","PM10","FINE","SO2","TMP","WDIR","WSPD")
+head(df4)
+dim(df4)  # 6216   13
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'westminster_marylebone_road_hourly.csv'))
+```
+
+
+
+
+
+
+
+
+
+tower_hamlets_1
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"tower_hamlets_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"tower_hamlets_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+unique(df$Species)    # BP NO NO2 NOX O3 PM10 RAIN RHUM SO2 SOLR TMP WDIR
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # BP   NO   NO2  NOX  O3   PM10 SO2  TMP  WDIR
+
+# Step 3: get new data frame for each Species
+#CO   = getSpeciesDataFrame(df2, 'CO')
+BP   = getSpeciesDataFrame(df2, 'BP')
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+O3   = getSpeciesDataFrame(df2, 'O3')
+PM10 = getSpeciesDataFrame(df2, 'PM10')
+#FINE = getSpeciesDataFrame(df2, 'FINE')
+SO2  = getSpeciesDataFrame(df2, 'SO2')
+#RAIN = getSpeciesDataFrame(df2, 'RAIN')
+#RHUM = getSpeciesDataFrame(df2, 'RHUM')
+#SOLR = getSpeciesDataFrame(df2, 'SOLR')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+#WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(BP,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,FINE,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SO2,   by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 378  46
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+# Finalize the data set
+head(df3)
+
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value'))
+df4 = df3[,keepCols]
+
+colnames(df4) = c("Site","Time","BP","NO","NO2","NOX","O3","PM10","SO2","TMP","WDIR")
+head(df4)
+dim(df4)  # 378  11
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'tower_hamlets_hourly.csv'))
+```
+
+
+
+
+
+
+
+
+
+dagenham_rush_green
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"dagenham_rush_green_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"dagenham_rush_green_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+unique(df$Species)    # BP RAIN SOLR TMP WDIR WSPD NO NO2 NOX RHUM SO2
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # BP   RAIN SOLR TMP  WDIR WSPD NO   NO2  NOX  RHUM SO2
+
+# Step 3: get new data frame for each Species
+#CO   = getSpeciesDataFrame(df2, 'CO')
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+#O3   = getSpeciesDataFrame(df2, 'O3')
+#PM10 = getSpeciesDataFrame(df2, 'PM10')
+#FINE = getSpeciesDataFrame(df2, 'FINE')
+#RHUM = getSpeciesDataFrame(df2, 'RHUM')  ONLY HAS 3 OBSERVATIONS!! LEAVE OUT.
+SO2  = getSpeciesDataFrame(df2, 'SO2')
+BP   = getSpeciesDataFrame(df2, 'BP')
+RAIN = getSpeciesDataFrame(df2, 'RAIN')
+SOLR = getSpeciesDataFrame(df2, 'SOLR')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(NO,NO2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,O3,     by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,FINE,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SO2,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,BP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,RAIN,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 6852   51
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+head(df3)
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value.x.x.x.x.x','Value.y.y.y.y.y'))
+df4 = df3[,keepCols]
+colnames(df4) = c("Site","Time","NO","NO2","NOX","SO2","BP","RAIN","SOLR","TMP","WDIR","WSPD")
+head(df4)
+dim(df4)  # 6852   12
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'dagenham_rush_green_hourly.csv'))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+harrow_stanmore
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"harrow_stanmore_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"harrow_stanmore_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+unique(df$Species)    # NO NO2 NOX PM10 PM2.5 SO2 SOLR WDIR WSPD
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # NO    NO2   NOX   PM10  PM2.5 SOLR  WDIR  WSPD 
+
+# Step 3: get new data frame for each Species
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+PM10   = getSpeciesDataFrame(df2, 'PM10')
+PM2.5 = getSpeciesDataFrame(df2, 'PM2.5')
+SOLR = getSpeciesDataFrame(df2, 'SOLR')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(NO,NO2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,PM2.5,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 2239   41
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+head(df3)
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                                'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y'))
+df4 = df3[,keepCols]
+colnames(df4) = c("Site","Time","NO","NO2","NOX","PM10","PM2.5","SOLR","WDIR","WSPD")
+head(df4)
+dim(df4)  # 2239   10
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'harrow_stanmore_hourly.csv'))
+```
+
+
+
+
+reigate_banstead_horley
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"reigate_banstead_horley_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"reigate_banstead_horley_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb)
+str(df)
+unique(df$Species)    # BP NO NO2 NOX O3 PM10 RAIN RHUM SOLR TMP WDIR WSPD
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # BP   NO   NO2  NOX  O3   PM10 RAIN RHUM SOLR TMP  WDIR WSPD
+
+# Step 3: get new data frame for each Species
+BP   = getSpeciesDataFrame(df2, 'BP')
+NO   = getSpeciesDataFrame(df2, 'NO')
+NO2  = getSpeciesDataFrame(df2, 'NO2')
+NOX  = getSpeciesDataFrame(df2, 'NOX')
+O3   = getSpeciesDataFrame(df2, 'O3')
+PM10 = getSpeciesDataFrame(df2, 'PM10')
+RAIN = getSpeciesDataFrame(df2, 'RAIN')
+RHUM = getSpeciesDataFrame(df2, 'RHUM')
+SOLR = getSpeciesDataFrame(df2, 'SOLR')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WDIR = getSpeciesDataFrame(df2, 'WDIR')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(BP,NO,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NO2,    by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,NOX,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,O3,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,PM10,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,RAIN,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,RHUM,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,SOLR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WDIR,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 4297   61
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+head(df3)
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                   'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value.x.x.x.x','Value.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y','Value.x.x.x.x.x.x','Value.y.y.y.y.y.y'))
+df4 = df3[,keepCols]
+colnames(df4) = c("Site","Time","BP","NO","NO2","NOX","O3","PM10","RAIN","RHUM","SOLR","TMP","WDIR","WSPD")
+head(df4)
+dim(df4)  #  4297   14
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df4, file.path(outfilePath,'reigate_banstead_horley_hourly.csv'))
+```
+
+
+
+
+
+
+richmond_ntl  -- DO NOT USE THIS DATA SET SINCE THERE IS NO OVERLAP BETWEEN REOPNSE AND PREDICTORS..
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+df = read.csv(file.path(inPath,"richmond_ntl_1.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfb = read.csv(file.path(inPath,"richmond_ntl_2.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfc = read.csv(file.path(inPath,"richmond_ntl_3.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfd = read.csv(file.path(inPath,"richmond_ntl_4.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dfe = read.csv(file.path(inPath,"richmond_ntl_5.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+dff = read.csv(file.path(inPath,"richmond_ntl_6.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+df = rbind(df,dfb,dfc,dfd,dfe,dff)
+str(df)
+unique(df$Species)    # O3    PM2.5 RAIN  RHUM  TMP   WSPD
+
+# Step 1: remove the NAs
+dim(df)  
+df2 = removeNas(df)
+dim(df2)   
+
+# Output
+# [1] 394416      6
+# [1] 235574      6
+
+# Step 2 - come back to this step - remove unused factor Species
+unique(df2$Species)   # O3    PM2.5 RAIN  RHUM  TMP   WSPD 
+
+# Step 3: get new data frame for each Species
+O3   = getSpeciesDataFrame(df2, 'O3')
+PM2.5 = getSpeciesDataFrame(df2, 'PM2.5')
+RAIN = getSpeciesDataFrame(df2, 'RAIN')
+RHUM = getSpeciesDataFrame(df2, 'RHUM')
+TMP  = getSpeciesDataFrame(df2, 'TMP')
+WSPD = getSpeciesDataFrame(df2, 'WSPD')
+
+# Step 4 - join each data frame together using the ReadingDateTime column as the join key
+# quick check to see which dataframes should NOT be included: RAIN, FINE, SOLR, TMP
+table(df2$Species)
+
+# Join the frames together
+df3  = inner_join(O3,PM2.5,       by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,RAIN,    by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,RHUM,   by = c("ReadingDateTime" = "ReadingDateTime"))
+#df3  = inner_join(df3,TMP,   by = c("ReadingDateTime" = "ReadingDateTime"))
+df3  = inner_join(df3,WSPD,   by = c("ReadingDateTime" = "ReadingDateTime"))
+dim(df3)   # 4297   61
+
+# Step 5 - update the column headers and drop the columns that are no longer needed
+head(df3)
+keepCols = which(names(df3) %in% c('Site.x', 'ReadingDateTime','Value.x','Value.y','Value.x.x','Value.y.y','Value.x.x.x',
+                                   'Value.y.y.y','Value.x.x.x.x','Value.y.y.y.y','Value.x.x.x.x','Value.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y','Value.x.x.x.x.x.x','Value.y.y.y.y.y.y'))
+df4 = df3[,keepCols]
+colnames(df4) = c("Site","Time","BP","NO","NO2","NOX","O3","PM10","RAIN","RHUM","SOLR","TMP","WDIR","WSPD")
+head(df4)
+dim(df4)  #  4297   14
+
+#outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+#write.csv(df4, file.path(outfilePath,'reigate_banstead_horley_hourly.csv'))
+```
+
+
+
+
+
+
+To this point we have created 8 different semi-groomed data sets. We next need to determine which nodes have the best data and what the final response and predictor variables should be. 
+
+Questions
+1. do we select 1 node that has the most observations?
+2. do we select multiple nodes that have the best overall amount of predictor/response variables
+3. do we choose 1/multi nodes that have most recent data?
+
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+csm = read.csv(file.path(inPath,"camden_st_martins_college_hourly.csv"),na.strings=c("NA"," "))   #North West London
+drg = read.csv(file.path(inPath,"dagenham_rush_green_hourly.csv"),na.strings=c("NA"," "))         #East London
+rbh = read.csv(file.path(inPath,"reigate_banstead_horley_hourly.csv"),na.strings=c("NA"," "))     #South - next to Gatwick airpor
+
+#bsg = read.csv(file.path(inPath,"bexley_slade_green_hourly.csv"),na.strings=c("NA"," "))
+#hs = read.csv(file.path(inPath,"harrow_stanmore_hourly.csv"),na.strings=c("NA"," "))
+#ha = read.csv(file.path(inPath,"heathrow_airport_hourly.csv"),na.strings=c("NA"," "))
+#th = read.csv(file.path(inPath,"tower_hamlets_hourly.csv"),na.strings=c("NA"," "))
+#wmr = read.csv(file.path(inPath,"westminster_marylebone_road_hourly.csv"),na.strings=c("NA"," "))
+
+# re-created the greenwich_eltham using a different date range -- this may be the best data set since it has PM2.5 and PM10.
+ge = read.csv(file.path(inPath,"greenwich_eltham_hourly.csv"),na.strings=c("NA"," "))   #North West London
+dim(ge)
+
+```
+
+
+
+GOOD
+1. csm ("X"    "Site" "Time"        "NO"   "NO2"  "NOX"                "RAIN" "RHUM" "SOLR" "TMP"  "WDIR" "WSPD")  - csm (6 predictors, 17k obs)
+2. drg ("X"    "Site" "Time" "BP"   "NO"   "NO2"  "NOX"  "SO2"         "RAIN"        "SOLR" "TMP"  "WDIR" "WSPD")  - drg (6 predictors, 7k obs)
+3. rbh ("X"    "Site" "Time" "BP"   "NO"   "NO2"  "NOX"  "O3"   "PM10" "RAIN" "RHUM" "SOLR" "TMP"  "WDIR" "WSPD")  - rbh (6 predictors, 4k obs)
+
+OK
+1. bsg ("X"    "Site" "Time" "CO"   "NO"   "NO2"  "NOX"  "O3"   "PM10" "WDIR" "WSPD")                      - bsg (Only 2 predictors, but 17k of obs)
+2. wmr ("X"    "Site" "Time" "CO"   "NO"   "NO2"  "NOX"  "O3"   "PM10" "FINE" "SO2"  "TMP"  "WDIR" "WSPD") - wmr (Only 3 pred, 6k obs)
+2. hs  ("X"    "Site"  "Time"  "NO"    "NO2"   "NOX"   "PM10"  "PM2.5" "SOLR"  "WDIR"  "WSPD")             - hs  (Only 3 predictors, only 2k obs)
+3. ha  ("X"    "Time" "CO"   "NO2"  "NOX"  "O3"   "PM10" "SOLR" "TMP"  "WDIR" "WSPD")                      - ha  (4 predictors, only 700 obs)
+
+BAD
+1. th("X"    "Site" "Time" "BP"   "NO"   "NO2"  "NOX"  "O3"   "PM10" "SO2"  "TMP"  "WDIR")                 - th (Only 2 predictors, 378 obs)
+
+
+
+Let's do a further review of the top 3 data sets.
+```{r}
+keepCols = which(names(csm) %in% c('Site','Time','NO','NO2','NOX','RAIN','SOLR','TMP','WDIR','WSPD'))
+df1 = csm[,keepCols]
+keepCols = which(names(drg) %in% c('Site','Time','NO','NO2','NOX','RAIN','SOLR','TMP','WDIR','WSPD'))
+df2 = drg[,keepCols]
+keepCols = which(names(rbh) %in% c('Site','Time','NO','NO2','NOX','RAIN','SOLR','TMP','WDIR','WSPD'))
+df3 = rbh[,keepCols]
+
+df = rbind(df1,df2,df3)
+dim(df)
+
+head(df)
+df$Time = as.Date(df$Time, format="%d/%m/%Y")
+df
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df, file.path(outfilePath,'air_pollution_london_hourly.csv'))  # file 1 is ok but no PM2.5 and PM10
+
+```
+

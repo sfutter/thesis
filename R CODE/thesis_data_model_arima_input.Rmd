@@ -1,0 +1,167 @@
+---
+title: "thesis data model ARIMA input"
+author: "Steven Futter"
+date: "5/7/2017"
+output: html_document
+---
+
+Purpose: run the same ex-post multiple linear regression model on the 'test' data frame, but instead of using the 'actual' inputs for each variable we instead use the arima modeled inputs. We can do this on the 'test' data frame of approx 800 obs currently. Note that we have already trained the model using ex post data modeling in the thesis_data_model.Rmd code.
+
+
+Step 1: take ARIMA generated test data frame and rename the column headers so that ONLY ARIMA generated cols are included
+```{r}
+infilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+df.arima = read.csv(file.path(infilePath,'results_test_data_all_vars_arima.csv'))
+
+# step 1: remove non arima.fitted columns from NO to lag.3.WSPD. 
+colnames.non.arima = names(df.arima)[1:64]
+colnames.non.arima
+length(colnames.non.arima) # 64
+
+df.arima.1 = df.arima %>% dplyr::select(X.1:TimeHoursNum, arima.fitted.NO:arima.fitted.lag.3.WSPD)
+names(df.arima.1)
+length(df.arima.1)   #64 - good.
+
+colnames(df.arima.1) = colnames.non.arima
+df.arima.1
+
+df = df.arima.1
+dim(df)
+
+```
+
+
+```{r}
+require(msaenet) # for msaenet.rmsle
+
+# Function that returns Root Mean Squared Error
+rmse <- function(error)
+{
+    sqrt(mean(error^2))
+}
+
+mse <- function(error)
+{
+  mean(error^2)
+}
+
+# Function that returns Mean Absolute Error
+mae <- function(error)
+{
+    mean(abs(error))
+}
+ 
+r2 <- function(actual,predict){
+  1 - (sum((actual-predict )^2)/sum((actual-mean(actual))^2))
+}
+
+
+```
+
+
+# ALL MULTIPLE LINEAR REGRESSION MODEL FOR 9AM - 1 hour ahead forecasts
+```{r}
+
+response = 'NO2'
+hour_of_response = 9
+
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.Rdata')
+# modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.Rdata')
+modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.Rdata')
+# modelForwardsName
+# modelBackwardsName
+modelStepwiseName
+```
+
+```{r}
+df.test = df
+
+response = 'NO2'
+hour_of_response = 16
+
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards.Rdata')
+# modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards.Rdata')
+# modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise.Rdata')
+# modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.Rdata')
+# modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.Rdata')
+modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.Rdata')
+# modelForwardsName
+# modelBackwardsName
+# modelStepwiseName
+
+# modelNames = c(modelForwardsName,modelBackwardsName,modelStepwiseName)
+modelNames = c(modelStepwiseName)
+# modelTypes = c('Forward Variable Selection (Ex Post Arima)', 'Backward Variable Selection (Ex Post Arima)', 'Stepwise Variable Selection (Ex Post Arima)')
+modelTypes = c('Stepwise Variable Selection (Ex Post Arima)')
+
+for ( i in 1:1) {
+
+modelFetch  = modelNames[i]
+model  = readRDS(file.path(modelPath,modelFetch))
+
+modelName   = modelTypes[i]
+yhat.test   = predict(model, newdata=df.test)
+formula     = as.character(model$formula[3])
+responseVal = as.character(model$formula[2])
+modelAIC    = model$aic
+
+################################################################## CAREFUL FOR 9AM HERE ##############################################
+# model                   = paste(responseVal,modelName,'Time',hour_of_day)
+modelString               = paste(responseVal,modelName,'Time',hour_of_response)
+######################################################################################################################################
+
+
+df.test.y  = df.test[,c(response)]
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+rmse.test   = rmse(test.error)  
+mse.test    = mse(test.error)   
+mae.test    = mae(test.error)   
+r2.test     = r2(df.test.y,predictions.test) #actual, predicted   
+rmsle.test  = msaenet.rmsle(df.test.y,predictions.test)  
+
+type                   = c('Testing')
+results.test           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+#results = rbind(results.train,results.test)
+results = results.test
+# results
+
+# infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+# outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+# 
+# ############################################################
+# ########################## CAREFUL #########################
+# ############################################################
+# # ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+# # head(results)
+# #write.csv(results, file.path(outfilePath,'results.csv'))
+# 
+# # # second time through - append to end #
+# head(results)
+resultsImport = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+resultsAppended = rbind(resultsImport, results)
+write.csv(resultsAppended, file.path(outfilePath,'results.csv'))
+resultsAppended
+
+}
+
+
+################################
+#### CALCULATION OF VIF ########
+################################
+
+# https://cran.r-project.org/web/packages/car/car.pdf  => anything over 10 has multicollinearity. But we know that this is a problem already. 
+
+# library(MASS)
+# install.packages('car')
+# car::vif(model)
+
+```

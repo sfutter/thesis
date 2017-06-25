@@ -1,0 +1,100 @@
+---
+title: "arimax"
+author: "Steven Futter"
+date: "5/7/2017"
+output: html_document
+---
+
+ARIMAX TSA function
+https://cran.r-project.org/web/packages/TSA/TSA.pdf
+
+```{r}
+#install.packages('TSA')
+library(TSA)
+library(forecast)
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+
+df$Date = as.Date(df$Date)
+
+df.train = subset(df, Date <= '2013-05-28')
+df.test  = subset(df, Date > '2013-05-28')
+
+head(df.train)
+tail(df.train)
+
+head(df.test)
+tail(df.test)
+
+dim(df.train)
+dim(df.test)
+
+
+response = 'NO2'
+df.train = df.train %>% dplyr::select(Date:lag.3.WSPD)
+df.test  = df.test  %>% dplyr::select(Date:lag.3.WSPD)
+
+covs      = df.train %>% dplyr::select(NO, NOX)
+covs.test = df.test  %>% dplyr::select(NO, NOX)
+
+# Fit model to train data
+arimax.fit = arimax(df.train$NO2, order=c(2,1,2), xreg = covs)
+
+# Apply fitted model to the test data
+fit2 <- predict(arimax.fit, newxreg = covs.test)  
+
+# Apply fitted model to the test data
+arimax.predict = predict(arimax.fit, newxreg=covs.test)
+arimax.predict
+df.test$NO2
+predict
+
+# export data
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+write.csv(arimax.predict, file.path(outfilePath,'to_delete.csv'))
+
+
+
+
+
+arima.fitted.test.vals = fitted(fit2)
+
+df.test = data.frame(df.test, arima.fitted.test.vals)
+names(df.test)[names(df.test)=="arima.fitted.test.vals"] <- paste0('arima.fitted.',response)
+
+
+
+head(df.test)
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+write.csv(df.test, file.path(outfilePath,'results_test_data_all_vars_arimax.csv'))
+
+
+
+
+
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

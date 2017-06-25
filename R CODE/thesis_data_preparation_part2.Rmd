@@ -1,0 +1,255 @@
+---
+title: "Thesis Exploratory Data Analysis"
+author: "Steven Futter"
+date: "4/2/2017"
+output: html_document
+---
+
+
+### Data Quality Check
+The air quality data set consists of 11392 hourly observations across 13 variables. The data set consists of six different pollutants (NO, NO2, NOX, O3, P2.5, and PM10) and five different meterological variables (BP, SOLR, TMP, WDIR, and WSPD), and Time. The node is based in Greenwich Eltham, London. The original data set consisted of five years, but I have only included observations where a value for each pollutant and meterological variable exists. The observations are taken of hourly (15 min averages) observations.  
+
+
+# STEP 1: add Year, Month, Week, Day variables
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_na_omit_w_na_lag1_lag2_lag3_imputed_hourly.csv"),na.strings=c("NA"," "))
+
+dim(df)
+df = df %>% select(Site,Time,NO:WSPD)  # we do not need to know at this point if the variable is imputed yes/no.
+
+(x <- strptime(df$Time, format="%d/%m/%Y %H:%M"))          # Strip time from date
+df$TimeHours = format(x,"%H:%M")
+
+df$TimeHoursNum = sapply(strsplit(df$TimeHours,":"),       # function to convert character time hours:sec into numeric
+  function(x) {
+    x <- as.numeric(x)
+    x[1]+x[2]/60
+    }
+)
+
+# add some time, date columns -- note: something going on with date here. Some are 2-digit Year, other 4.
+df$TimeAlt1 = as.Date(df$Time, format="%d/%m/%y %H:%M")       # Convert the Time variable to date format
+df$TimeAlt2 = as.Date(df$Time, format="%d/%m/%Y %H:%M")       # Convert the Time variable to date format
+df = mutate(df, Date = ifelse(is.na(as.character(TimeAlt1)),as.character(TimeAlt2), as.character(TimeAlt1)))
+df$Date = as.Date(df$Date, '%Y-%m-%d')
+
+df$Year = as.numeric(format(df$Date,'%Y'))                # Get Year and Month from date
+df$Month = as.numeric(format(df$Date,'%m'))
+df$Week = as.numeric(format(df$Date,'%W'))
+df$Day <- as.factor(weekdays(df$Date))
+
+df = df %>% select(Date, Year, Month, Week, Day, TimeHoursNum,NO:WSPD)
+
+str(df)
+head(df)
+```
+
+# Narrow down the data set to be school hours and week days only
+# STEP 2: REDUCE THE DATA SET WEEK DAYS: MON-FRI and SCHOOL HOURS: between 9AM - 4PM.
+
+```{r}
+df = df %>% filter(Day!='Saturday' & Day!='Sunday' & (TimeHoursNum>=6 & TimeHoursNum<=16) )
+table(df$Year, df$Month)
+dim(df)  # 3600   20  -> 4987   20 including 6 am to 4pm as need the 3-hour lag values included
+```
+
+
+
+# STEP 3: REMOVE DATES THAT HAVE LESS THAN THE FULL NUMBER OF HOURS IN THE DAY: 9 - 4pm is 8 hours. Note that i include 11 full hours instead of the 8 so that i can use the lagged 1-3 hours values for 9am. i.e. need to include between 6am and 4pm so that i have lagged values from 9am onwards.
+
+```{r}
+# get dates that have >=22 hours in each day
+# detach("package:plyr", unload=TRUE) # needed this to ensure that n = n() was working!!
+# http://stackoverflow.com/questions/22801153/dplyr-error-in-n-function-should-not-be-called-directly
+
+#df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==11)
+
+dates.over.x.hours = df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==11)
+dates.over.x.hours = dates.over.x.hours[,1]
+
+df = inner_join(df,dates.over.x.hours,by = c("Date" = "Date"))
+dim(df)  # 3360  20  > 4532   20
+
+# quick check that what I just did worked
+df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n<11) ## 0 rows returned = GOOD!!
+
+table(df$Year, df$Month)
+table(df$Year, df$Week)
+length(unique(df$Date)) # 422 dates -> 547 dates -> 412 dates
+dim(df) # 4532 x 20 obs
+
+
+
+```
+
+# STEP 3: CREATE LAGGED VALUES FOR EACH VARIABLE
+#         Note: lagged values would be problematic where there has been a jump in dates. However, given that we are ONLY going to be using times between 9AM and 4PM (I.e. school start-end times in the UK) the lag between midnight on the new day and the prior hours of the 'previous' date will not be a problem.
+```{r}
+names(df)
+#  [1] "Date"         "Year"         "Month"        "Week"         "Day"          "TimeHoursNum" "NO"           "NO2"          "NOX"          "O3"          
+# [11] "PM10"         "PM2.5"        "SO2"          "BP"           "RAIN"         "RHUM"         "SOLR"         "TEMP"         "WDIR"         "WSPD" 
+
+dim(df)  # 9938   20 -> 12856    20 (22 hours)  ->4532    20 (11 hours)
+
+# Re-create 1-hour lagged variables
+df = df %>% mutate(lag.1.NO    = lag(NO,1))
+df = df %>% mutate(lag.1.NO2   = lag(NO2,1))
+df = df %>% mutate(lag.1.NOX   = lag(NOX,1))
+df = df %>% mutate(lag.1.O3    = lag(O3,1))
+df = df %>% mutate(lag.1.PM10  = lag(PM10,1))
+df = df %>% mutate(lag.1.PM2.5 = lag(PM2.5,1))
+df = df %>% mutate(lag.1.SO2   = lag(SO2,1))
+df = df %>% mutate(lag.1.BP    = lag(BP,1))
+df = df %>% mutate(lag.1.RAIN  = lag(RAIN,1))
+df = df %>% mutate(lag.1.RHUM  = lag(RHUM,1))
+df = df %>% mutate(lag.1.SOLR  = lag(SOLR,1))
+df = df %>% mutate(lag.1.TEMP   = lag(TEMP,1))
+df = df %>% mutate(lag.1.WDIR  = lag(WDIR,1))
+df = df %>% mutate(lag.1.WSPD  = lag(WSPD,1))
+
+# Re-create 2-hour lagged variables
+df = df %>% mutate(lag.2.NO    = lag(NO,2))
+df = df %>% mutate(lag.2.NO2   = lag(NO2,2))
+df = df %>% mutate(lag.2.NOX   = lag(NOX,2))
+df = df %>% mutate(lag.2.O3    = lag(O3,2))
+df = df %>% mutate(lag.2.PM10  = lag(PM10,2))
+df = df %>% mutate(lag.2.PM2.5 = lag(PM2.5,2))
+df = df %>% mutate(lag.2.SO2   = lag(SO2,2))
+df = df %>% mutate(lag.2.BP    = lag(BP,2))
+df = df %>% mutate(lag.2.RAIN  = lag(RAIN,2))
+df = df %>% mutate(lag.2.RHUM  = lag(RHUM,2))
+df = df %>% mutate(lag.2.SOLR  = lag(SOLR,2))
+df = df %>% mutate(lag.2.TEMP   = lag(TEMP,2))
+df = df %>% mutate(lag.2.WDIR  = lag(WDIR,2))
+df = df %>% mutate(lag.2.WSPD  = lag(WSPD,2))
+
+
+# Re-create 3-hour lagged variables
+df = df %>% mutate(lag.3.NO    = lag(NO,3))
+df = df %>% mutate(lag.3.NO2   = lag(NO2,3))
+df = df %>% mutate(lag.3.NOX   = lag(NOX,3))
+df = df %>% mutate(lag.3.O3    = lag(O3,3))
+df = df %>% mutate(lag.3.PM10  = lag(PM10,3))
+df = df %>% mutate(lag.3.PM2.5 = lag(PM2.5,3))
+df = df %>% mutate(lag.3.SO2   = lag(SO2,3))
+df = df %>% mutate(lag.3.BP    = lag(BP,3))
+df = df %>% mutate(lag.3.RAIN  = lag(RAIN,3))
+df = df %>% mutate(lag.3.RHUM  = lag(RHUM,3))
+df = df %>% mutate(lag.3.SOLR  = lag(SOLR,3))
+df = df %>% mutate(lag.3.TEMP  = lag(TEMP,3))
+df = df %>% mutate(lag.3.WDIR  = lag(WDIR,3))
+df = df %>% mutate(lag.3.WSPD  = lag(WSPD,3))
+
+dim(df)  #4532    62  (11 hours)
+
+```
+
+<!-- # STEP 4: REDUCE THE DATA SET WEEK DAYS: MON-FRI and SCHOOL HOURS: between 9AM - 4PM.  -->
+
+<!-- ```{r} -->
+<!-- dim(df) -->
+<!-- df = df %>% filter(Day!='Saturday' & Day!='Sunday' & (TimeHoursNum>=9 & TimeHoursNum<=16) ) -->
+<!-- table(df$Year, df$Month) -->
+<!-- dim(df) -->
+<!-- ``` -->
+
+# Commenting out this section for now. Seems a bit restrictive and not sure this is needed given that we already have a low volume of data points.
+<!-- # STEP 5: ONLY INCLUDE FULL SCHOOL WEEKS INTO THE DATA. I.e. ONLY INCLUDE WEEKS WHERE WE HAVE 5 DAYS IN EACH WEEK INCLUDED!  -->
+<!-- # Part 1: get dates with 8 hours in them -- i.e. 9am to 4pm  -->
+<!-- ```{r} -->
+<!-- df -->
+
+<!-- df.dates.tmp = df %>% group_by(Date) %>% summarise(Hours=length(unique(TimeHoursNum))) %>% filter(Hours==8)  -->
+<!-- df.dates.tmp = df.dates.tmp[,1] -->
+<!-- df.dates.tmp -->
+
+<!-- df.fullday = inner_join(df,df.dates.tmp,by = c("Date" = "Date")) -->
+<!-- dim(df.fullday)  # 1744   53  -> 2560 x 62 -->
+
+<!-- df.fullday -->
+<!-- ``` -->
+
+
+** NOT SO SURE WE NEED TO DO THIS BIT ** 
+# Part 2: reduce year 2009 to those weeks with 5 full days - repeat for 2010 then combine the two data frames 
+```{r}
+# create copy
+#df = df.fullday
+
+table(df$Year, df$Month)
+
+# # 2009 first
+# df.2009 = df %>% filter(Year==2009)
+# df.2009.tmp = df %>% filter(Year==2009) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+# df.2009.tmp = df.2009.tmp[,1]
+# df.2009.fullweek = inner_join(df.2009,df.2009.tmp,by = c("Week" = "Week"))
+# dim(df.2009.fullweek)  # 280 53
+
+# 2010 second
+df.2010 = df %>% filter(Year==2010)
+df.2010.tmp = df %>% filter(Year==2010) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2010.tmp = df.2010.tmp[,1]
+df.2010.fullweek = inner_join(df.2010,df.2010.tmp,by = c("Week" = "Week"))
+dim(df.2010.fullweek)  # 200 53  -> 110 62
+
+# 2011
+df.2011 = df %>% filter(Year==2011)
+df.2011.tmp = df %>% filter(Year==2011) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2011.tmp = df.2011.tmp[,1]
+df.2011.fullweek = inner_join(df.2011,df.2011.tmp,by = c("Week" = "Week"))
+dim(df.2011.fullweek)  # 200 53  -> 0 62
+
+# 2012
+df.2012 = df %>% filter(Year==2012)
+df.2012.tmp = df %>% filter(Year==2012) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2012.tmp = df.2012.tmp[,1]
+df.2012.fullweek = inner_join(df.2012,df.2012.tmp,by = c("Week" = "Week"))
+dim(df.2012.fullweek)  #1155  62
+
+# 2013
+df.2013 = df %>% filter(Year==2013)
+df.2013.tmp = df %>% filter(Year==2013) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2013.tmp = df.2013.tmp[,1]
+df.2013.fullweek = inner_join(df.2013,df.2013.tmp,by = c("Week" = "Week"))
+dim(df.2013.fullweek)  # 1155  62
+
+# 2014
+df.2014 = df %>% filter(Year==2014)
+df.2014.tmp = df %>% filter(Year==2014) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2014.tmp = df.2014.tmp[,1]
+df.2014.fullweek = inner_join(df.2014,df.2014.tmp,by = c("Week" = "Week"))
+dim(df.2014.fullweek)  #440  62
+
+
+
+df.fullweek.fullday = rbind(df.2010.fullweek,df.2011.fullweek,df.2012.fullweek,
+                            df.2013.fullweek,df.2014.fullweek)
+dim(df.fullweek.fullday) # 480 53 -> 2860 62
+length(unique(df.fullweek.fullday$Date)) # 90 days -> 260 dates
+dim(df.fullweek.fullday) # 2860   62
+
+table(df.fullweek.fullday$Year, df.fullweek.fullday$Month)
+dim(df.fullweek.fullday) # 2860   62
+
+
+```
+
+# only includes hours 9 to 4pm
+```{r}
+df.fullweek.fullday = df.fullweek.fullday %>% filter(TimeHoursNum>=9 & TimeHoursNum<=16)
+dim(df.fullweek.fullday)  # 2080   62
+
+table(df.fullweek.fullday$Year, df.fullweek.fullday$Month)
+```
+
+
+
+# STEP 6: EXPORT CSV
+```{r}
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+#write.csv(df.fullweek.fullday, file.path(outfilePath,'greenwich_eltham_school_hours.csv'))
+write.csv(df.fullweek.fullday, file.path(outfilePath,'greenwich_eltham_imputed_school_hours.csv'))
+```
+

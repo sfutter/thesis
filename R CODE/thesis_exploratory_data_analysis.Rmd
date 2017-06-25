@@ -1,0 +1,211 @@
+---
+title: "Thesis Exploratory Data Analysis"
+author: "Steven Futter"
+date: "4/2/2017"
+output: html_document
+---
+
+### EDA
+
+```{r}
+library(plyr)
+library(dplyr)
+library('lattice')
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+# df = read.csv(file.path(inPath,"greenwich_eltham_school_hours.csv"),na.strings=c("NA"," "))
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+
+df = processPart6(df)
+dim(df)  # 2860   62
+
+```
+
+
+Table created has 2860 rows since it also includes lagged hours 1-3 for 9am (6,7,8am). Let's exclude these rows here so that we can continue with the EDA.
+```{r}
+str(df)
+# TimeHoursNum currently a factor
+hoursCondition = c('9','10','11','12','13','14','15','16')
+df = df %>% filter(TimeHoursNum %in% hoursCondition)
+dim(df)
+```
+
+
+EXPLORATORY DATA ANALYSIS
+# Average Hourly NO2 Concentrations (Six Months in 2013)
+```{r}
+library(plotly)
+table(df$Year, df$Month)
+
+no2.hourly.avg.jun.2012 = df %>% filter(Year=='2012' & Month=='6') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+no2.hourly.avg.feb.2013 = df %>% filter(Year=='2013' & Month=='2') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+no2.hourly.avg.apr.2013 = df %>% filter(Year=='2013' & Month=='4') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+no2.hourly.avg.may.2013 = df %>% filter(Year=='2013' & Month=='5') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+no2.hourly.avg.aug.2013 = df %>% filter(Year=='2013' & Month=='8') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+no2.hourly.avg.nov.2013 = df %>% filter(Year=='2013' & Month=='11') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+no2.hourly.avg.dec.2013 = df %>% filter(Year=='2013' & Month=='12') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+
+
+f <- list(
+  family = "Courier New, monospace",
+  size = 18,
+  color = "#7f7f7f"
+)
+x <- list(
+  title = "Hour of Day",
+  titlefont = f
+)
+y <- list(
+  title = "Average Hourly NO2",
+  titlefont = f
+)
+
+data  = inner_join(no2.hourly.avg.feb.2013,no2.hourly.avg.apr.2013, by = c("TimeHoursNum" = "TimeHoursNum"))
+data  = inner_join(data,no2.hourly.avg.may.2013, by = c("TimeHoursNum" = "TimeHoursNum"))
+data  = inner_join(data,no2.hourly.avg.aug.2013, by = c("TimeHoursNum" = "TimeHoursNum"))
+data  = inner_join(data,no2.hourly.avg.nov.2013, by = c("TimeHoursNum" = "TimeHoursNum"))
+data  = inner_join(data,no2.hourly.avg.dec.2013, by = c("TimeHoursNum" = "TimeHoursNum"))
+colnames(data) = c('Time','Feb2013','Apr2013','May2013','Aug2013','Nov2013','Dec2013')
+data
+
+p <- plot_ly(data, x = ~Time, y=~Feb2013, name = 'Feb 2013', type='scatter', mode='lines+markers') %>%      
+  add_trace(y = ~Apr2013, name = 'Apr 2013',mode = 'lines+markers') %>%
+  add_trace(y = ~May2013, name = 'May 2013',mode = 'lines+markers') %>%
+  add_trace(y = ~Aug2013, name = 'Aug 2013',mode = 'lines+markers') %>%
+  add_trace(y = ~Nov2013, name = 'Nov 2013',mode = 'lines+markers') %>%
+  add_trace(y = ~Dec2013, name = 'Dec 2013',mode = 'lines+markers') %>%
+  layout(title = "Average Hourly NO2 Greenwich Eltham 2013",
+         xaxis = list(title  = "Hour of Day (24 Hour Clock)"),
+         yaxis = list (title = "Average Hourly NO2 Concentration (µg/m3)"))
+p
+
+```
+
+KEY FINDING: 
+1. Taking data over the school week (Monday to Friday) for six months in 2013 average hourly concentrations of NO2 can be seen following a cyclic, double-peaked pattern. NO2 concentrations rise during the early morning commute peaking between 6-8am in the morning. NO2 concentrations then decline steadily up to 12-1pm, then rates steadily increase up to the end of the school day (4pm) as the evening commute begins and people return home from work/school. NON-LINEAR!!! BE CAREFUL!!! 
+2. The cooler months (Feb, Nov, Dec) appear to have a higher average level of NO2 than the warmer months (Apr, May, Aug). This highlights that temperature may also have a predictive input into average NO2 concentrations. 
+
+
+RANGE, MIN, MAX, OUTLIERS
+```{r}
+library('lattice')
+names(df)
+
+#Let's look at some boxplots
+table(df$Year, df$Month)
+bwplot(df$NO2,              xlab="NO2 µg/m3", main='Boxplot of NO2 Concentrations (2012-2013)')
+bwplot(df$Day~df$NO2,       xlab="NO2 µg/m3", main='Boxplot of NO2 Concentrations (2012-2013) by Day')
+bwplot(df$TimeHoursNum~df$NO2, xlab="NO2 µg/m3", ylab="Hour of Day (24 Hour Clock)", main='Boxplot of NO2 Concentrations (2012-2013) by Hour')
+
+```
+
+KEY FINDINGS --> see my write up on the google doc.
+
+
+# CORRELATIONS
+```{r}
+# install.packages('corrplot')
+library(corrplot)
+names(df)
+# PLOT 1 SHOWING CORRELATION OF NO2 LEVELS TO METEOROLOGICAL VARIABLES
+df.correlation = df %>% select(NO2,BP,RAIN,RHUM,SOLR,TEMP,WDIR,WSPD)
+M <- cor(df.correlation[,sapply(df.correlation, is.numeric)])
+corrplot(M, method="number")
+
+# PLOT 2 SHOWING CORRELATION OF NO2 LEVELS TO POLLUTANT VARIABLES
+df.correlation = df %>% select(NO2,NO, NOX, O3, PM10, PM2.5, SO2)
+M <- cor(df.correlation[,sapply(df.correlation, is.numeric)])
+corrplot(M, method="number")
+
+```
+
+KEY FINDINGS -> see google doc write-up
+
+
+
+# WIND SPEED CORRELATION WITH NO2
+Frequency plot of bucketed wind direction
+```{r}
+#df$WDIR.bucket<-cut(df$WDIR, seq(0,360,90), labels=c('1-90','90-180','180-270','270-360'))
+df$WDIR.bucket<-cut(df$WDIR, seq(0,360,90), labels=c('North East','South East','South West','North West'))
+table(df$WDIR.bucket)
+densityplot(~ NO2, data = df, groups = WDIR.bucket,plot.points = FALSE, ref = TRUE,auto.key = list(columns = 3))   # µg/m3
+```
+
+KEY FINDING:
+1. Another interesting finding is the confirmation that when winds primarily blow from a south westerly direction the levels of NO2 tend to be low. From the figure X below we can see that the green line (180-270 which denotes a south-westerly wind) is responsible for the lower NO2 values. This makes sense given that south westerly winds bring cleaner air from the atlantic ocean. This is apparent when comparing winds that come from an eastern direction thus transporting pollutant matter from other european countries. 
+
+
+# TREE PLOT
+```{r}
+require(rpart)
+require(rattle)
+require(rpart.plot)
+
+names(df)
+dropIdx1 = which(names(df) %in% c("Date")) # remove variables as they will throw off the results
+df = df[,-dropIdx1]
+
+# Plot a more reasonable tree
+form <- as.formula(df$NO2 ~ .)
+tree <- rpart(form,df)			# A more reasonable tree
+fancyRpartPlot(tree)				# A fancy plot from rattle
+summary(tree)
+
+```
+
+
+SCATTERPLOTS
+```{r}
+names(df)
+t = df %>% select(NO2, NO, NOX, O3, PM10, PM2.5, SO2)
+tt = df %>% select(NO2, RAIN) #BP, RAIN, RHUM, SOLR, TEMP, WDIR, WSPD)
+pairs(tt)
+```
+
+
+
+DIDN'T USE THIS IN THE END BUT PERHAPS I SHOULD??
+
+```{r}
+# Custom function to calculate min, 0.05, median, 0.95, max, % missing for each variable
+maxfun            <- function(x){round(max(x,na.rm = TRUE),2)} 
+minfun            <- function(x){round(min(x,na.rm = TRUE),2)}   
+quantilefun       <- function(x){round(quantile(x,c(0.01,0.05,0.25,0.5,0.75,0.95,0.99)),2)}
+meanfun           <- function(x){round(mean(x),2)}
+varfun            <- function(x){round(var(x),2)}
+countfun          <- function(x){round(sum(!is.na(x)),2)}
+percentMissingfun <- function(x){round(100*(sum(is.na(x))/length(x)),2)}
+
+my.summary = function(df){
+  max = colwise(maxfun)(df)                     #create rows of summarized values using colwise function from plyr package
+  min = colwise(minfun)(df)
+  quantile = colwise(quantilefun)(df)
+  mean = colwise(meanfun)(df)
+  variance = colwise(varfun)(df)
+  count = colwise(countfun)(df)
+  percentMissing = colwise(percentMissingfun)(df)
+  
+  # bind data.frame and rename rows
+  mydf = rbind(min, quantile, max, mean, variance, count, percentMissing)
+  rownames(mydf) = c('min',0.01,0.05,0.25,0.5,0.75,0.95,0.99,'max','mean','variance','count','% missing')
+  return(t(mydf)) # take transpose
+}
+
+cols = c('X','Site','Time','TimeHours','Year','Date','Month','Week','Day','TimeHoursNum','WDIR.bucket')
+excludeIdx = which(names(df) %in% cols)
+df1 = df[,-excludeIdx]
+
+my.summary(df1)
+```
+
+
+RAIN MAX -- checked that this matches the recordings by Met Office
+http://www.metoffice.gov.uk/climate/uk/interesting/april-july2012
+
+```{r}
+names(df)
+df %>% select(RAIN, Date) %>% group_by(Date) %>% summarise(max = max(RAIN)) %>%  arrange(-max)
+```

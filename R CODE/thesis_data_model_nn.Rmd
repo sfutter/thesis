@@ -1,0 +1,262 @@
+---
+title: "neural network model"
+author: "Steven Futter"
+date: "5/30/2017"
+output: html_document
+---
+
+# MODEL 3: ANN using H2O - multinomial classification
+http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/index.html
+Useful tutorial: https://github.com/h2oai/h2o-tutorials/tree/master/tutorials/deeplearning
+
+
+ONLY NEED THIS ON FIRST RUN THROUGH
+```{r}
+# The following two commands remove any previously installed H2O packages for R.
+if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) }
+if ("h2o" %in% rownames(installed.packages())) { remove.packages("h2o") }
+
+# Next, we download packages that H2O depends on.
+if (! ("methods" %in% rownames(installed.packages()))) { install.packages("methods") }
+if (! ("statmod" %in% rownames(installed.packages()))) { install.packages("statmod") }
+if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") }
+if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") }
+if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") }
+if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") }
+if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") }
+if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") }
+
+# Now we download, install and initialize the H2O package for R.
+install.packages("h2o", type="source", repos=(c("http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/R")))
+library(h2o)
+localH2O = h2o.init(nthreads=-1)
+```
+
+ONCE THE MODEL ABOVE IS LOADED I need to:
+a. use a Neural Network to model each hour of day. E.g. train nn to calc 9am, 10am, 11am, ... Use only 6am-8am data. (Ex ante)
+b. calculate the MAE and compare that to the MAE of the ex ante multiple linear regression model 
+
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))   # 2860 x 63
+
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = 'NO2'  # NO, NO2, NOX, O3, PM10, PM2.5, AND SO2
+
+hour_of_response = 9                 # hour of day for Response Variable
+hour_of_day = 9                       # hour of day for Explanatory Variables
+# hour_of_day = hour_of_response      # FOR EX POST: the hour of response and hour of day data are the same
+df1 = processPart1(df)                # Convert Date to date format and Year, Month, Week, Day, TimeHoursNum to factors. Drop Date & Week cols.
+df2 = processPart2(df1,hour_of_day)   # Get Explanatory Variable data observations (for EX ANTE this will be 9AM observations)
+df3 = processPart4(df2)               # Drop cols of data that include current hour (for EX ANTE this ensures we're looking at 6AM, 7AM, 8AM vars)
+df4 = processPart5(df1,response, hour_of_response)    # get the correct hour of day (e.g. 10AM) Response Variable Values
+df5 = cbind(df4, df3)                 # Combine Response Variable values with Explanatory Variables 
+colnames(df5)[1] = response           # Rename Response Variable to e.g. NO2 (for EX ANTE - explanatory variables stay same, but RESPONSE hour changes)
+head(df5)
+
+# Prep the testing data using 70-30 split
+######### CAREFUL HERE ##########
+# df = df3  # 9AM ONLY
+df = df5  # 10AM ONWARDS
+#################################
+
+smp.size = floor(0.70 * nrow(df))
+set.seed(123)
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+df.train = df[train,]
+df.test  = df[-train,]
+
+# these vectors are needed for the modeling results rmd
+df.train.y = df[train,c(response)]
+df.test.y  = df[-train,c(response)]
+
+# # Not sure why but it appears that an ID column gets auto added to df.train and df.test - so i remove it here
+# df.train = df.train[,1:length(names(df.train))]
+# df.test  = df.test[,1:length(names(df.test))]
+dim(df.train)    # 182 x 46
+dim(df.test)     # 78  x 46
+```
+
+
+```{r}
+#library(h2o) # ONLY NEED ON FIRST RUN THROUGH
+#h2o.init()   # ONLY NEED ON FIRST RUN THROUGH
+
+df.train.hex <- as.h2o(df.train)
+df.test.hex  <- as.h2o(df.test)
+
+# Training: For some reason when i run as.h2o a new line gets added in row 1 - so i remove it below.
+dim(df.train)
+dim(df.train.hex) # 124 columns so i choose 62 nodes.
+#df.train.hex
+#df.train.hex = df.train.hex[2:nrow(df.train.hex),]
+# head(df.train.hex)
+
+df.train.hex
+names(df.train.hex)
+
+# I use a rule of thumb that the hidden nodes should be half as columns
+colcount    = dim(df.train.hex)[2]
+hiddencount = round(dim(df.train.hex)[2]/2)  # need to run the neural network with half as many hidden nodes as input nodes
+df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, hidden=c(hiddencount), variable_importances = TRUE)
+summary(df.train.dl)
+
+# Testing: As above for the training data. Line added from as.h2o needs to be removed from row 1.
+dim(df.test)
+dim(df.test.hex)
+#df.test.hex = df.test.hex[2:nrow(df.test.hex),]
+
+# make a prediction here
+predictions <- h2o.predict(df.train.dl, df.train.hex)
+predictions
+
+predictions.test <- h2o.predict(df.train.dl, df.test.hex)
+predictions.test
+
+# TRAINING: evaluate the quality of prediction here
+df.train.mse = mean((predictions-df.train.hex$NO2)^2)
+df.train.mse         # 23.48436 MSE -> 24.31025
+
+df.train.mae = mean(abs(predictions-df.train.hex$NO2))
+df.train.mae         # -0.19 MSE -> 24.31025
+
+
+# TESTING: evaluate the quality of the prediction using the test data set:
+df.test.mse = mean((predictions.test-df.test.hex$NO2)^2)
+df.test.mse          # 47.01364 MSE -> 36.5444
+
+df.test.mae = mean(abs(predictions.test-df.test.hex$NO2))
+df.test.mae          # 47.01364 MSE -> 36.5444
+
+```
+
+
+```{r}
+# EXPORT THE DATA
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+dfExport = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+class(dfExport)
+head(dfExport)
+dfExport
+write.csv(dfExport, file.path(outfilePath,'greenwich_eltham_no2_ann.csv'))
+
+# RETRIEVE VARIABLE IMPORTANCES
+h2o.varimp(df.train.dl)  # need to figure out how to create deviance and var importance plots in same manner as working group.
+```
+
+
+THE ABOVE WORKS FINE FOR THE NN EX ANTE APPROACH - PERFORMANCE IS BETTER FOR FURTHER AHEAD TIMES IN DAY, BUT NOT AS GOOD FOR EARLIER IN DAY VS MULTI REG -- LETS MOVE ON TO CREATE NEW VARIABLES: Diff Since 6am and Current NO2 value.
+
+
+TRYING TO FIGURE OUT EARLY WARNING SIGNS FOR THE HIGH LEVELS OF NO2 SEEN ON THESE DATES
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))   # 2860 x 63
+df = df %>% select(Date, Year, Month, Week, Day, TimeHoursNum, NO2)
+df
+
+##############################################################################################
+################# CALCULATE DIFF BETWEEN CURRENT HOUR AND EG 6AM #############################
+##############################################################################################
+# for every day we need to subtract current hour NO2 from 6am 
+df1 = df %>% filter(TimeHoursNum=='6') %>% group_by(Date) %>% summarise(sum(NO2))
+df1
+
+df2 = inner_join(df,df1,by = c("Date" = "Date"))
+df2
+
+df2$NO2diffTo6am = df2$NO2 - df2$`sum(NO2)`
+df2
+
+plot(df2$NO2diffTo6am, type='l')
+
+
+##############################################################################################
+################# CALCULATE HOUR OF DAY WHERE MAX NO2 LEVEL OCCURS ###########################
+##############################################################################################
+df1 = df %>% group_by(Date) %>% summarize(max(NO2)) 
+df1
+
+df2 = inner_join(df,df1,by = c("Date" = "Date"))
+df2
+
+df2$NO2diffToDailyMax = df2$NO2 - df2$`max(NO2)`
+df2
+
+
+##############################################################################################
+######################## CALCULATE MONTHLY AVERAGE NO2 LEVELS ################################
+##############################################################################################
+df1 = df %>% group_by(Year,Month) %>% summarize(mean(NO2)) 
+df1
+
+df2 = inner_join(df,df1,by = c("Year" = "Year", "Month" = "Month"))
+df2
+
+df2$NO2diffToMonthlyMean = df2$NO2 - df2$`mean(NO2)`
+df2
+
+
+##############################################################################################
+################################## CALCULATE 6-8AM SLOPE #####################################
+##############################################################################################
+# for every day we need to subtract 8AM hour NO2 from 6AM hour NO2 
+diffBetweenHours = 8 - 6  #i.e. the number of hours for X-dimension (divisor for slope)
+diffBetweenHours
+
+df1 = df %>% filter(TimeHoursNum=='6') %>% group_by(Date) %>% summarise(sum(NO2))
+df1 = rename(df1, NO2.6AM = `sum(NO2)`)
+df1
+
+df2 = df %>% filter(TimeHoursNum=='8') %>% group_by(Date) %>% summarise(sum(NO2))
+df2 = rename(df2, NO2.8AM = `sum(NO2)`)
+df2
+
+df3 = inner_join(df1,df2,by = c("Date" = "Date"))
+df3
+
+df3$NO2.6AM.8AM.SLOPE = (df3$NO2.8AM - df3$NO2.6AM)/diffBetweenHours
+df3 = df3 %>% select(Date,NO2.6AM.8AM.SLOPE)
+
+df4 = inner_join(df,df3,by = c("Date" = "Date"))
+df4
+
+# Then figure out the max dates 
+# 2013-12-11	79.9			
+# 2014-03-10	78.6			
+# 2013-03-18	73.4			
+# 2013-03-07	71.8			
+# 2013-12-06	71.3	
+df4 %>% filter(Date=='2013-12-11')  #10.1
+df4 %>% filter(Date=='2014-03-10')  #-9.85
+df4 %>% filter(Date=='2013-03-18')  #7.55
+df4 %>% filter(Date=='2013-03-07')  #-0.35
+df4 %>% filter(Date=='2013-12-06')  #13.9    # some did fall down 
+
+
+
+##############################################################################################
+############################# WHAT ARE THE MAX NO2 DATES #####################################
+##############################################################################################
+
+# figure out which dates have the highest NO2 levels
+dfMax = df %>% group_by(Date) %>% summarize(max(NO2)) 
+colnames(dfMax)[2] = 'NO2Max'
+dfMax = arrange(dfMax, desc(NO2Max))
+dfMax
+
+
+```
+
+
+HAVE TO MAKE THE TOOL APPLICABLE --- IT IS ONLY APPLICABLE IF THERE ARE ANSWERS TO RESPONSE VALUES WHEN LIMITED INPUTS. HOW TO MAKE THIS APPLICABLE IN REAL WORLD????? Use of imputed values and MISSING VALUES topic of discussion. 
+
+
+

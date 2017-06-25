@@ -1,0 +1,32 @@
+---
+title: "API Access Met Office"
+author: "Steven Futter"
+date: "4/23/2017"
+output: html_document
+---
+
+THIS WAS A FAILED ATTEMPT - RAN OUT OF TIME TO FINISH WORKING WITH MET OFFICE DATA API. But, my API key is still valid.
+
+```{r}
+install.packages(c("httr", "jsonlite", "lubridate"))
+```
+
+
+http://datapoint.metoffice.gov.uk/public/data/resource?key=APIkey
+
+MY API KEY: 537808c9-e6db-4743-a1fb-9237ce980c00
+
+
+```{r}
+install.packages('jsonlite')
+library(httr)
+library(jsonlite)
+library(lubridate)
+url  <- "http://datapoint.metoffice.gov.uk/public/data/"
+path <- "val/wxfcs/all/xml/3840?res=3hourly&key=537808c9-e6db-4743-a1fb-9237ce980c00"
+
+http://datapoint.metoffice.gov.uk/public/data/val/wxfcs/all/xml/3772?res=3hourly&key=<APIkey>
+raw.result <- GET(url = url, path = path)
+
+
+```

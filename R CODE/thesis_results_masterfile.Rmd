@@ -1,0 +1,118 @@
+---
+title: "Results masterfile"
+author: "Steven Futter"
+date: "5/14/2017"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(stringr) #install.packages('stringr')
+infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+resultsReview = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+resultsReview$ResponseTime = str_sub(resultsReview$Model,-2)
+resultsReview
+
+stepwise.ex.ante       = filter(resultsReview, !grepl("Ex Post",Model))
+stepwise.ex.post       = filter(resultsReview, !grepl("(Ex Post Arima)",Model))
+stepwise.ex.post       = filter(stepwise.ex.post, grepl("(Ex Post)",Model))
+stepwise.ex.post.arima = filter(resultsReview, grepl("(Ex Post Arima)",Model))
+
+
+
+# 1. to display in initial model results - i.e. for the individual model results sections
+stepwise.ex.ante.v.train = stepwise.ex.ante %>% filter(Data.Set == 'Training') %>% select(Model, Formula, MAE) %>% rename('Training MAE' = MAE)
+stepwise.ex.ante.v.train
+stepwise.ex.ante.v.test  = stepwise.ex.ante %>% filter(Data.Set == 'Testing') %>% select(MAE) %>% rename('Testing MAE' = MAE)
+stepwise.ex.ante.v.test
+stepwise.ex.ante.v = cbind(stepwise.ex.ante.v.train, stepwise.ex.ante.v.test)
+stepwise.ex.ante.v 
+
+# 2. To add to final results table view
+stepwise.ex.ante.train =  stepwise.ex.ante %>% 
+                          select(Model, ResponseTime, Data.Set, MAE) %>% 
+                          filter(Data.Set=='Training') %>% 
+                          select(MAE) %>% 
+                          rename(stepwise.ex.ante.train.MAE = MAE) %>% 
+                          t() %>% 
+                          data.frame()
+stepwise.ex.ante.train
+
+stepwise.ex.ante.test  =  stepwise.ex.ante %>% 
+                          select(Model, ResponseTime, Data.Set, MAE) %>% 
+                          filter(Data.Set=='Testing') %>% 
+                          select(MAE) %>% 
+                          rename(stepwise.ex.ante.test.MAE = MAE) %>% 
+                          t() %>% 
+                          data.frame()
+stepwise.ex.ante.test
+
+
+
+# 1. to display in initial model results - i.e. for the individual model results sections
+stepwise.ex.post.v.train = stepwise.ex.post %>% filter(Data.Set == 'Training') %>% select(Model, Formula, MAE) %>% rename('Training MAE' = MAE)
+stepwise.ex.post.v.train
+stepwise.ex.post.v.test  = stepwise.ex.post %>% filter(Data.Set == 'Testing') %>% select(MAE) %>% rename('Testing MAE' = MAE)
+stepwise.ex.post.v.test
+stepwise.ex.post.v = cbind(stepwise.ex.post.v.train, stepwise.ex.post.v.test)
+stepwise.ex.post.v 
+
+# 2. To add to final results table view
+stepwise.ex.post.train =  stepwise.ex.post %>% 
+                          select(Model, ResponseTime, Data.Set, MAE) %>% 
+                          filter(Data.Set=='Training') %>% 
+                          select(MAE) %>% 
+                          rename(stepwise.ex.post.train.MAE = MAE) %>% 
+                          t() %>% 
+                          data.frame()
+stepwise.ex.post.train
+
+stepwise.ex.post.test  =  stepwise.ex.post %>% 
+                          select(Model, ResponseTime, Data.Set, MAE) %>% 
+                          filter(Data.Set=='Testing') %>% 
+                          select(MAE) %>% 
+                          rename(stepwise.ex.post.test.MAE = MAE) %>% 
+                          t() %>% 
+                          data.frame()
+stepwise.ex.post.test
+
+
+# 1. to display in initial model results - i.e. for the individual model results sections
+stepwise.ex.post.arima.v.test  = stepwise.ex.post.arima %>% filter(Data.Set == 'Testing') %>% select(MAE) %>% rename('Testing MAE' = MAE)
+stepwise.ex.post.arima.v.test
+
+# 2. To add to final results table view
+stepwise.ex.post.arima.test  =  stepwise.ex.post.arima %>% 
+                                select(Model, ResponseTime, Data.Set, MAE) %>% 
+                                filter(Data.Set=='Testing') %>% 
+                                select(MAE) %>% 
+                                rename(stepwise.ex.post.arima.test.MAE = MAE) %>% 
+                                t() %>% 
+                                data.frame()
+stepwise.ex.post.arima.test
+
+
+# 2 - combine all three model train/test results
+results.all = rbind(stepwise.ex.ante.train,stepwise.ex.ante.test, stepwise.ex.post.train, stepwise.ex.post.test, stepwise.ex.post.arima.test)
+results.all
+
+# update col headers
+colnames(results.all) = c('9am','10am','11am','12am','1pm','2pm','3pm','4pm')
+results.all
+
+# OUTPUT RESULTS TO FINAL MODEL OUTPUT CSV
+write.csv(results.all, file.path(outfilePath,'results.all.models.csv'))
+
+
+
+
+```
+
+
+
+
+```{r}
+mtcars
+t(mtcars)
+```

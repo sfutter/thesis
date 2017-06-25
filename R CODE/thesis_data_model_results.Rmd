@@ -1,0 +1,366 @@
+---
+title: "thesis results"
+author: "Steven Futter"
+date: "4/30/2017"
+output: html_document
+---
+
+
+```{r}
+require(msaenet) # for msaenet.rmsle
+
+# Function that returns Root Mean Squared Error
+rmse <- function(error)
+{
+    sqrt(mean(error^2))
+}
+
+mse <- function(error)
+{
+  mean(error^2)
+}
+
+# Function that returns Mean Absolute Error
+mae <- function(error)
+{
+    mean(abs(error))
+}
+ 
+r2 <- function(actual,predict){
+  1 - (sum((actual-predict )^2)/sum((actual-mean(actual))^2))
+}
+
+
+```
+
+
+# ALL MULTIPLE LINEAR REGRESSION MODEL FOR 9AM - 1 hour ahead forecasts
+```{r}
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+# modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards.Rdata')
+# modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards.Rdata')
+# modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise.Rdata')
+modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.Rdata')
+modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.Rdata')
+modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.Rdata')
+modelForwardsName
+modelBackwardsName
+modelStepwiseName
+```
+
+VIF: my models each have multicollinearity present and VIF values > 10. This is a problem. 
+```{r}
+modelFetch  = 'model_response_NO2_hour_16_stepwise_ex_post.Rdata'   # Change 16 to 9-16... and re-run to see the vif values for each predictor.
+model  = readRDS(file.path(modelPath,modelFetch))
+formula(model)
+vif(model)
+```
+
+```{r}
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+modelForwardsName  = paste0('model_response_',response,'_hour_',hour_of_response,'_forwards_ex_post.Rdata')
+modelBackwardsName = paste0('model_response_',response,'_hour_',hour_of_response,'_backwards_ex_post.Rdata')
+modelStepwiseName  = paste0('model_response_',response,'_hour_',hour_of_response,'_stepwise_ex_post.Rdata')
+modelForwardsName
+modelBackwardsName
+modelStepwiseName
+
+modelNames = c(modelForwardsName,modelBackwardsName,modelStepwiseName)
+modelTypes = c('Forward Variable Selection (Ex Post)', 'Backward Variable Selection (Ex Post)', 'Stepwise Variable Selection (Ex Post)')
+
+for ( i in 1:3) {
+
+modelFetch  = modelNames[i]
+model  = readRDS(file.path(modelPath,modelFetch))
+
+modelName   = modelTypes[i]
+yhat.train  = predict(model, newdata=df.train)
+yhat.test   = predict(model, newdata=df.test)
+formula     = as.character(model$formula[3])
+responseVal = as.character(model$formula[2])
+modelAIC    = model$aic
+
+summary(model)
+
+train.predictions=yhat.train
+error        = train.predictions-df.train.y
+rmse.train   = rmse(error) 
+mse.train    = mse(error)   
+mae.train    = mae(error)    
+r2.train     = r2(df.train.y,train.predictions)   #actual, predicted      
+rmsle.train  = msaenet.rmsle(df.train.y,train.predictions)   
+
+################################################################## CAREFUL FOR 9AM HERE ##############################################
+# model                   = paste(responseVal,modelName,'Time',hour_of_day)
+modelString               = paste(responseVal,modelName,'Time',hour_of_response)
+######################################################################################################################################
+
+type                    = c('Training')
+results.train           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.train, mse.train,mae.train,r2.train,rmsle.train)
+colnames(results.train) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.train
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+rmse.test   = rmse(test.error)  
+mse.test    = mse(test.error)   
+mae.test    = mae(test.error)   
+r2.test     = r2(df.test.y,predictions.test) #actual, predicted   
+rmsle.test  = msaenet.rmsle(df.test.y,predictions.test)  
+
+type                   = c('Testing')
+results.test           = data.frame(modelString,type,responseVal,formula,modelAIC,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data.Set','Response','Formula','AIC','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+results = rbind(results.train,results.test)
+results
+
+infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+
+############################################################
+########################## CAREFUL #########################
+############################################################
+# ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+# head(results)
+# write.csv(results, file.path(outfilePath,'results.csv'))
+
+# second time through - append to end #
+head(results)
+resultsImport = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+resultsAppended = rbind(resultsImport, results)
+write.csv(resultsAppended, file.path(outfilePath,'results.csv'))
+resultsAppended
+
+}
+
+
+################################
+#### CALCULATION OF VIF ########
+################################
+
+# https://cran.r-project.org/web/packages/car/car.pdf  => anything over 10 has multicollinearity. But we know that this is a problem already. 
+
+# library(MASS)
+# install.packages('car')
+# car::vif(model)
+
+```
+
+
+
+# MODEL 1: BACKWARD VARIABLE SELECTION MODEL
+```{r}
+yhat.fwd.train = predict(forwards, newdata=df.train)
+mean((yhat.fwd.train-df.train$NO2)^2)       # MSE = 24.73961 (in-sample)
+
+yhat.fwd.test = predict(forwards, newdata=df.test)
+mean((yhat.fwd.test-df.test$NO2)^2)         # MSE = 18.2229 (out-of-sample)
+
+
+# BACKWARD VARIABLE SELECTION MODEL
+yhat.bwd.train = predict(backwards, newdata=df.train)
+mean((yhat.bwd.train-df.train$NO2)^2)       # MSE = 24.27903 (in-sample)
+
+yhat.bwd.test = predict(backwards, newdata=df.test)
+mean((yhat.bwd.test-df.test$NO2)^2)         # MSE = 17.87902 (out-of-sample)
+
+
+# STEPWISE VARIABLE SELECTION MODEL
+yhat.stepwise.train = predict(stepwise, newdata=df.train)
+mean((yhat.stepwise.train-df.train$NO2)^2)       # MSE = 24.73961 (in-sample)
+
+yhat.stepwise.test = predict(stepwise, newdata=df.test)
+mean((yhat.stepwise.test-df.test$NO2)^2)         # MSE = 18.2229 (out-of-sample)
+```
+
+# USING FORWARD VAR SELECTION
+```{r}
+#yhat.fwd.train = predict(forwards, newdata=df.train)
+yhat.fwd.train = predict(forward1, newdata=df.train)
+mean((yhat.fwd.train-df.train$NO2)^2)       # MSE = 24.73961 (in-sample)
+
+yhat.fwd.test = predict(forwards, newdata=df.test)
+mean((yhat.fwd.test-df.test$NO2)^2)         # MSE = 18.2229 (out-of-sample)
+
+
+predictions=yhat.fwd.train
+error <- predictions-df.train$NO2
+rmse.train  = rmse(error) 
+mse.train   = mse(error)   
+mae.train   = mae(error)    
+r2.train    = r2(df.train$NO2,predictions)   #actual, predicted      
+rmsle.train = msaenet.rmsle(df.train$NO2,predictions)   
+
+model                   = c('NO2 Forward 9AM')
+type                    = c('Training')
+results.train           = data.frame(model,type,rmse.train, mse.train,mae.train,r2.train,rmsle.train)
+colnames(results.train) = c('Model','Data.Set','RMSE','MSE','MAE','R2','RMSLE')
+results.train
+
+# Calculate testing error
+predictions.test = yhat.fwd.test
+test.error <- predictions.test-df.test$NO2
+rmse.test   = rmse(test.error)  
+mse.test    = mse(test.error)   
+mae.test    = mae(test.error)   
+r2.test     = r2(df.test$NO2,predictions.test) #actual, predicted   
+rmsle.test  = msaenet.rmsle(df.test$NO2,predictions.test)  
+
+type                   = c('Testing')
+results.test           = data.frame(model,type,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data.Set','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+results = rbind(results.train,results.test)
+results
+dim(results)
+
+
+infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+
+
+############################################################
+########################## CAREFUL #########################
+############################################################
+# ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+head(results)
+write.csv(results, file.path(outfilePath,'results.csv'))
+
+# second time through - append to end #
+resultsImport = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+names(resultsImport)
+names(results)
+
+resultsAll    = rbind(resultsImport, results)
+head(resultsAll)
+write.csv(resultsAll, file.path(outfilePath,'results.csv'))
+
+
+```
+
+
+
+```{r}
+# BACKWARD VARIABLE SELECTION MODEL
+yhat.bwd.train = predict(backwards, newdata=df.train)
+yhat.bwd.train = predict(model_9AM_NO2_backwards, newdata=df.train)
+
+mean((yhat.bwd.train-df.train$NO2)^2)       # MSE = 24.27903 (in-sample)
+
+yhat.bwd.test = predict(backwards, newdata=df.test)
+mean((yhat.bwd.test-df.test$NO2)^2)         # MSE = 17.87902 (out-of-sample)
+
+
+predictions=yhat.bwd.train
+error <- predictions-df.train$NO2
+rmse.train  = rmse(error) 
+mse.train   = mse(error)   
+mae.train   = mae(error)    
+r2.train    = r2(df.train$NO2,predictions)   #actual, predicted      
+rmsle.train = msaenet.rmsle(df.train$NO2,predictions)   
+
+model                   = c('NO2 Backward')
+type                    = c('Training')
+results.train           = data.frame(model,type,rmse.train, mse.train,mae.train,r2.train,rmsle.train)
+colnames(results.train) = c('Model','Data.Set','RMSE','MSE','MAE','R2','RMSLE')
+results.train
+
+# Calculate testing error
+predictions.test = yhat.bwd.test
+test.error <- predictions.test-df.test$NO2
+rmse.test   = rmse(test.error)  
+mse.test    = mse(test.error)   
+mae.test    = mae(test.error)   
+r2.test     = r2(df.test$NO2,predictions.test) #actual, predicted   
+rmsle.test  = msaenet.rmsle(df.test$NO2,predictions.test)  
+
+type                   = c('Testing')
+results.test           = data.frame(model,type,rmse.test, mse.test,mae.test,r2.test,rmsle.test)
+colnames(results.test) = c('Model','Data.Set','RMSE','MSE','MAE','R2','RMSLE')
+results.test
+
+results = rbind(results.train,results.test)
+results
+dim(results)
+
+infilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+
+
+# # ONLY RUN FIRST TIME TO RESET RESULTS TABLE 
+# write.csv(results, file.path(outfilePath,'results.csv'))
+
+# second time through - append to end #
+resultsImport = read.csv(file.path(infilePath,"results.csv"),na.strings=c("NA"," "))
+resultsImport = resultsImport[,2:length(names(resultsImport))]  # remove the 'X' column
+names(resultsImport)
+names(results)
+
+#####TEMP CODING TO SEE INTO THE NO2 for TRAIN/TEST MAE ETC*####
+resultsImport %>% filter(Response=='NO2') 
+####################################
+
+resultsAll    = rbind(resultsImport, results)
+head(resultsAll)
+write.csv(resultsAll, file.path(outfilePath,'results.csv'))
+
+
+```
+
+
+# RESULTS EXPORT
+```{r}
+# EXPORT THE DATA
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+dfExport = as.data.frame(cbind(predictions.test,df.test))
+class(dfExport)
+head(dfExport)
+dfExport
+dim(dfExport)
+write.csv(dfExport, file.path(outfilePath,'greenwich_eltham_no2_bwd_9am.csv'))
+```
+
+
+
+
+
+<!-- # MODEL 2: ANN MODEL -->
+<!-- ```{r} -->
+<!-- error <- predictions-df.train.hex$NO2 -->
+<!-- rmse.train  = rmse(error)    -->
+<!-- mse.train   = mse(error)     -->
+<!-- mae.train   = mae(error)       -->
+<!-- r2.train    = r2(df.train.hex$NO2,predictions)               -->
+<!-- rmsle.train = msaenet.rmsle(df.train.hex$NO2,predictions)    -->
+
+<!-- model                   = c('ANN') -->
+<!-- type                    = c('Training') -->
+<!-- results.train           = data.frame(model,type,rmse.train, mse.train,mae.train,r2.train,rmsle.train) -->
+<!-- colnames(results.train) = c('Model','Data Set','RMSE','MSE','MAE','R2','RMSLE') -->
+<!-- results.train -->
+
+<!-- # Calculate testing error -->
+<!-- test.error <- predictions.test-df.test.hex$NO2 -->
+<!-- rmse.test   = rmse(test.error)   #heathrow 14.57655 -->
+<!-- mse.test    = mse(test.error)    #heathrow 212.4759 -->
+<!-- mae.test    = mae(test.error)    #heathrow 11.71268 -->
+<!-- r2.test     = r2(df.test.hex$NO2,predictions.test) #actual, predicted    #heathrow 0.5161738 -->
+<!-- rmsle.test  = msaenet.rmsle(df.test.hex$NO2,predictions.test)   #heathrow 0.696822 -->
+
+<!-- type                   = c('Testing') -->
+<!-- results.test           = data.frame(model,type,rmse.test, mse.test,mae.test,r2.test,rmsle.test) -->
+<!-- colnames(results.test) = c('Model','Data Set','RMSE','MSE','MAE','R2','RMSLE') -->
+<!-- results.test -->
+
+<!-- results = rbind(results.train,results.test) -->
+<!-- results -->
+
+
+<!-- ``` -->
+

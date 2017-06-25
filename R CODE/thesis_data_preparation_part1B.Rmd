@@ -1,0 +1,573 @@
+---
+title: "Thesis Data Preparation"
+author: "Steven Futter"
+date: "3/30/2017"
+output: html_document
+---
+
+
+# 1a. Get all raw data from LondonAir: Greenwich Eltham else Bexley Belvedere West & Bexley Erith
+```{r}
+library(dplyr)
+
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","LONDON_AIR") # Home path
+ge.no = read.csv(file.path(inPath,"greenwich_eltham_no_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.no2 = read.csv(file.path(inPath,"greenwich_eltham_no2_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.nox = read.csv(file.path(inPath,"greenwich_eltham_nox_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.o3 = read.csv(file.path(inPath,"greenwich_eltham_o3_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.pm2.5 = read.csv(file.path(inPath,"greenwich_eltham_pm2.5_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.pm10 = read.csv(file.path(inPath,"greenwich_eltham_pm10_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.so2 = read.csv(file.path(inPath,"greenwich_eltham_so2_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.bp = read.csv(file.path(inPath,"greenwich_eltham_bp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+be.bp = read.csv(file.path(inPath,"greenwich_eltham_bexley_erith_bp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.rain = read.csv(file.path(inPath,"greenwich_eltham_rain_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+bbw.rain = read.csv(file.path(inPath,"greenwich_eltham_bexley_belvedere_west_rain_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.rhum = read.csv(file.path(inPath,"greenwich_eltham_rhum_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+bbw.rhum = read.csv(file.path(inPath,"greenwich_eltham_bexley_belvedere_west_rhum_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.solr = read.csv(file.path(inPath,"greenwich_eltham_solr_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+drg.solr = read.csv(file.path(inPath,"greenwich_eltham_dagenham_rush_green_solr_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.temp = read.csv(file.path(inPath,"greenwich_eltham_temp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+bbw.temp = read.csv(file.path(inPath,"greenwich_eltham_bexley_belvedere_west_temp_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.wdir = read.csv(file.path(inPath,"greenwich_eltham_wdir_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+ge.wspd = read.csv(file.path(inPath,"greenwich_eltham_wspd_2008_2016.csv"),na.strings=c("NA"," "),colClasses = c("factor", "factor", "factor", "numeric", "character", "factor"))
+
+dim(ge.no)    # all are 78912     6
+dim(ge.no2)
+dim(ge.nox)
+dim(ge.o3)
+dim(bbw.rain)
+dim(drg.solr)
+
+``` 
+
+
+# 1b. Combine the different site variables into one data frame using the date timestamp as the join key. Note that the date timestampe 'ReadingDateTime' covers all days from jan 1 2008 to dec 31 2016. 
+```{r}
+df1  = full_join(ge.no,ge.no2,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.nox,         by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.o3,          by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.pm10,        by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.pm2.5,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.so2,         by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.bp,          by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,be.bp,          by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.rain,        by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.rain,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.rhum,        by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.rhum,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.solr,        by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,drg.solr,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.temp,        by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,bbw.temp,       by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.wdir,        by = c("ReadingDateTime" = "ReadingDateTime"))
+df1  = full_join(df1,ge.wspd,        by = c("ReadingDateTime" = "ReadingDateTime"))
+
+dim(df1)  # 78912    96
+```
+
+
+#1c. Use nearby station data when values for GE are missing (explain distances and reasoning here: XXX)
+```{r}
+names(df1)
+# for full join
+keepCols = which(names(df1) %in% c('Site.x', 'ReadingDateTime',
+                                   'Value.x','Value.y',
+                                   'Value.x.x','Value.y.y',
+                                   'Value.x.x.x','Value.y.y.y',
+                                   'Value.x.x.x.x','Value.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y',
+                                   'Value.x.x.x.x.x','Value.y.y.y.y.y',
+                                   'Value.x.x.x.x.x.x','Value.y.y.y.y.y.y',
+                                   'Value.x.x.x.x.x.x.x','Value.y.y.y.y.y.y.y', 
+                                   'Value.x.x.x.x.x.x.x.x', 'Value.y.y.y.y.y.y.y.y',
+                                   'Value.x.x.x.x.x.x.x.x.x', 'Value.y.y.y.y.y.y.y.y.y',
+                                   'Value'))
+
+
+df2 = df1[,keepCols]
+
+colnames(df2) = c("Site","Time","NO","NO2","NOX","O3","PM10","PM2.5","SO2","BP.GE","BP.BE","RAIN.GE","RAIN.BBW","RHUM.GE","RHUM.BBW","SOLR.GE","SOLR.DRG","TEMP.GE","TEMP.BBW","WDIR","WSPD")  #BBW = bexley belvedere west
+
+# IMPUTE values for temp, rain, rhum, bp, solr
+df2 = mutate(df2, TEMP.IMP = ifelse(is.na(TEMP.GE),TEMP.BBW, TEMP.GE))
+df2 = mutate(df2, RAIN.IMP = RAIN.BBW)
+df2 = mutate(df2, RHUM.IMP = ifelse(is.na(RHUM.GE),RHUM.BBW, RHUM.GE))
+df2 = mutate(df2, BP.IMP   = ifelse(is.na(BP.GE),BP.BE, BP.GE))
+df2 = mutate(df2, SOLR.IMP = ifelse(is.na(SOLR.GE),SOLR.DRG, SOLR.GE))
+
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df2, file.path(outfilePath,'greenwich_eltham_with_replace_bexley_rain_temp_rhum_hourly_B.csv'))
+
+dim(df2)
+```
+
+
+# 1d. Create Date column since Time field provided includes two different formats of dates. 
+```{r}
+(x <- strptime(df2$Time, format="%d/%m/%Y %H:%M"))          # Strip time from date
+df2$TimeHours = format(x,"%H:%M")
+
+df2$TimeHoursNum = sapply(strsplit(df2$TimeHours,":"),       # function to convert character time hours:sec into numeric
+  function(x) {
+    x <- as.numeric(x)
+    x[1]+x[2]/60
+    }
+)
+
+# add some time, date columns -- note: something going on with date here. Some are 2-digit Year, other 4.
+df2$TimeAlt1 = as.Date(df2$Time, format="%d/%m/%y %H:%M")       # Convert the Time variable to date format
+df2$TimeAlt2 = as.Date(df2$Time, format="%d/%m/%Y %H:%M")       # Convert the Time variable to date format
+df2 = mutate(df2, Date = ifelse(is.na(as.character(TimeAlt1)),as.character(TimeAlt2), as.character(TimeAlt1)))
+df2$Date = as.Date(df2$Date, '%Y-%m-%d')
+
+# new data frame with Date2 and TimeHoursNum2
+min(df2$Date) # 2008-01-01
+max(df2$Date) # 2016-12-31 
+
+
+###### THE ALL HOURS AND DATES DATA FRAME CREATED BELOW IS ACTUALLY NOT NEEDED SINCE THE ORIGINAL DATA SET COMES WITH ALL HOURS 
+###### IN THE YEAR ALREADY. RATHER THAN CBIND THE TWO DATA FRAMES TOGETHER I DECIDE TO GO WITHOUT. THIS CONFIRMS HOWEVER THAT THE
+###### ORIGINAL DATA SET DOES INCLUDE ALL HOURS OF THE YEAR BETWEEN 2008 AND 2016. 
+# create vector of ALL DATES & HOURS between jan 1 2008 and dec 31 2016. Confirmed that data set provided by LondonAir includes all dates & hours. 
+# all.dates = seq(as.Date("2008-01-01"), as.Date("2016-12-31"), by="days")
+# all.dates = data.frame(all.dates,'Key')
+# all.hours = seq(0,23)
+# all.hours = data.frame(all.hours, 'Key')
+# all.hours.df = inner_join(all.dates,all.hours,by = c("X.Key." = "X.Key."))
+# all.hours.df = all.hours.df %>% select (all.dates,  all.hours)
+# dim(all.hours.df)  # 78912 is all hours over the time period min-max above. This matches the number of rows in the data frame above.
+
+```
+
+
+# 2a. Check summary of Missing Values - all variables
+```{r}
+df3 = df2
+names(df3)
+df.temp = df3 %>% select(NO:WSPD)
+
+# part 1 - all vars
+countMissing = sapply(df.temp, function(x) sum(is.na(x)))
+percentMissing = round(apply(df.temp, 2, function(col)sum(is.na(col))/length(col)),2)
+
+df.temp.missing = data.frame(countMissing, percentMissing)
+df.temp.missing = df.temp.missing[order(-percentMissing),]  # with ordering on desc percentMissing 
+df.temp.missing
+```
+
+# 2b. Check summary of missing values for the imputed BP, RAIN, RHUM, TEMP, and SOLR variables. 
+```{r}
+# Let's now see the values for Imputed RAIN, RHUM, BP, SOLR, and TEMP
+names(df3)
+df.temp = df3 %>% select(TEMP.IMP:SOLR.IMP)
+
+countMissing   = sapply(df.temp, function(x) sum(is.na(x)))
+percentMissing = round(apply(df.temp, 2, function(col)sum(is.na(col))/length(col)),2)
+
+df.temp.missing = data.frame(countMissing, percentMissing)
+df.temp.missing = df.temp.missing[order(-percentMissing),] # with ordering on desc percentMissing
+df.temp.missing
+
+```
+
+
+# 3a. Rename imputed variables to main variable names
+```{r}
+# To this point we ahve imputed the values for BP, RAIN, RHUM, TEMP, and SOLR from the nearby sites: Bexley Erith, Bexley Belvedere West, and Dagenham Rush Green. 
+names(df2)
+df3 = df2 %>% select(Site,NO,NO2,NOX,O3,PM10,PM2.5,SO2,BP.IMP,RAIN.IMP,RHUM.IMP,SOLR.IMP,TEMP.IMP,WDIR,WSPD, TimeHoursNum,
+                     Date)
+colnames(df3) = c('Site','NO','NO2','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM',
+                  'SOLR','TEMP','WDIR','WSPD','TimeHoursNum','Date')
+dim(df3)
+str(df3)
+
+```
+
+# 3b. Create Year, Month, Week, Day variables. 
+```{r}
+# detach("package:plyr", unload=TRUE) # needed this to ensure that n = n() was working!!
+# http://stackoverflow.com/questions/22801153/dplyr-error-in-n-function-should-not-be-called-directly
+df4 = df3
+
+df4$Year = as.numeric(format(df4$Date,'%Y'))                # Get Year and Month from date
+df4$Month = as.numeric(format(df4$Date,'%m'))
+df4$Week = as.numeric(format(df4$Date,'%W'))
+df4$Day <- as.factor(weekdays(df4$Date))
+
+df4 = df4 %>% select(Date, Year, Month, Week, Day, TimeHoursNum,NO:WSPD)
+dim(df4) # 78912 x 20
+names(df4)
+head(df4)
+```
+
+# 4a - create a function where you specify number of lags needed and input variable and then loop through data frame to add the lags.  
+#      Attempt 1: create 24 hours of lag values per each predictor variable to begin with. 
+#      * Create 1-24 hour lagged variables *
+```{r}
+# function to create new column in data frame with lagged variable
+lagColumnAdd = function(df, predictor, lagCount){  
+  existColNames = colnames(df)
+  dfNew = df
+  for ( i in 1:lagCount){
+    laggedVar = lag(dfNew[,predictor], i)
+    dfNew = cbind(dfNew, laggedVar)
+    colnames(dfNew)[length(dfNew)] = paste0('lag.',i,'.',predictor)
+  }
+  return(dfNew)
+}
+
+df5 = lagColumnAdd(df4, 'NO',    24)  # creates lags 1 to 24
+df5 = lagColumnAdd(df5, 'NOX',   24)
+df5 = lagColumnAdd(df5, 'O3',    24)
+df5 = lagColumnAdd(df5, 'PM10',  24)
+df5 = lagColumnAdd(df5, 'PM2.5', 24)
+df5 = lagColumnAdd(df5, 'SO2',   24)
+df5 = lagColumnAdd(df5, 'BP',    24)
+df5 = lagColumnAdd(df5, 'RAIN',  24)
+df5 = lagColumnAdd(df5, 'RHUM',  24)
+df5 = lagColumnAdd(df5, 'SOLR',  24)
+df5 = lagColumnAdd(df5, 'TEMP',  24)
+df5 = lagColumnAdd(df5, 'WDIR',  24)
+df5 = lagColumnAdd(df5, 'WSPD',  24)
+
+```
+
+# 4b. use the lagged variable values to calculate the IMPUTED 'IMP' column values. 
+```{r}
+# Use lag1 if available, else use lag 2, else lag 3..etc (to 5). See correlation effort in EDA. 
+df5 = mutate(df5, NO.IMP      = ifelse(is.na(NO),    ifelse(is.na(lag.1.NO),    ifelse(is.na(lag.2.NO),   ifelse(is.na(lag.3.NO), ifelse(is.na(lag.4.NO), lag.5.NO, lag.4.NO), lag.3.NO),    lag.2.NO) ,    lag.1.NO ),      NO         ))
+df5 = mutate(df5, NOX.IMP     = ifelse(is.na(NOX),   ifelse(is.na(lag.1.NOX),   ifelse(is.na(lag.2.NOX),  ifelse(is.na(lag.3.NOX), ifelse(is.na(lag.4.NOX), lag.5.NOX, lag.4.NOX), lag.3.NOX),    lag.2.NOX) ,    lag.1.NOX ),      NOX ))
+df5 = mutate(df5, O3.IMP      = ifelse(is.na(O3),    ifelse(is.na(lag.1.O3),    ifelse(is.na(lag.2.O3),   ifelse(is.na(lag.3.O3), ifelse(is.na(lag.4.O3), lag.5.O3, lag.4.O3), lag.3.O3),    lag.2.O3) ,    lag.1.O3 ),      O3      ))
+df5 = mutate(df5, PM10.IMP= ifelse(is.na(PM10),  ifelse(is.na(lag.1.PM10),  ifelse(is.na(lag.2.PM10), ifelse(is.na(lag.3.PM10), ifelse(is.na(lag.4.PM10), lag.5.PM10, lag.4.PM10), lag.3.PM10),    lag.2.PM10) ,  lag.1.PM10 ), PM10    ))
+df5 = mutate(df5, SO2.IMP = ifelse(is.na(SO2),   ifelse(is.na(lag.1.SO2),   ifelse(is.na(lag.2.SO2),  ifelse(is.na(lag.3.SO2), ifelse(is.na(lag.4.SO2), lag.5.SO2, lag.4.SO2), lag.3.SO2),    lag.2.SO2) ,    lag.1.SO2 ),  SO2      ))
+df5 = mutate(df5, BP.IMP  = ifelse(is.na(BP),    ifelse(is.na(lag.1.BP),    ifelse(is.na(lag.2.BP),   ifelse(is.na(lag.3.BP), ifelse(is.na(lag.4.BP), lag.5.BP, lag.4.BP), lag.3.BP),    lag.2.BP) ,    lag.1.BP ),      BP      ))
+df5 = mutate(df5, RAIN.IMP= ifelse(is.na(RAIN),  ifelse(is.na(lag.1.RAIN),  ifelse(is.na(lag.2.RAIN), ifelse(is.na(lag.3.RAIN), ifelse(is.na(lag.4.RAIN), lag.5.RAIN, lag.4.RAIN), lag.3.RAIN),    lag.2.RAIN) ,    lag.1.RAIN ),      RAIN      ))
+df5 = mutate(df5, RHUM.IMP= ifelse(is.na(RHUM),  ifelse(is.na(lag.1.RHUM),  ifelse(is.na(lag.2.RHUM), ifelse(is.na(lag.3.RHUM), ifelse(is.na(lag.4.RHUM), lag.5.RHUM, lag.4.RHUM), lag.3.RHUM),    lag.2.RHUM) ,    lag.1.RHUM ),      RHUM      ))
+df5 = mutate(df5, SOLR.IMP    = ifelse(is.na(SOLR),  ifelse(is.na(lag.1.SOLR),  ifelse(is.na(lag.2.SOLR), ifelse(is.na(lag.3.SOLR), ifelse(is.na(lag.4.SOLR), lag.5.SOLR, lag.4.SOLR), lag.3.SOLR),    lag.2.SOLR) ,    lag.1.SOLR ),      SOLR      ))
+df5 = mutate(df5, TEMP.IMP    = ifelse(is.na(TEMP),  ifelse(is.na(lag.1.TEMP),  ifelse(is.na(lag.2.TEMP), ifelse(is.na(lag.3.TEMP), ifelse(is.na(lag.4.TEMP), lag.5.TEMP, lag.4.TEMP), lag.3.TEMP),    lag.2.TEMP) ,    lag.1.TEMP ),      TEMP      ))
+df5 = mutate(df5, WDIR.IMP    = ifelse(is.na(WDIR),  ifelse(is.na(lag.1.WDIR),  ifelse(is.na(lag.2.WDIR), ifelse(is.na(lag.3.WDIR), ifelse(is.na(lag.4.WDIR), lag.5.WDIR, lag.4.WDIR), lag.3.WDIR),    lag.2.WDIR) ,    lag.1.WDIR ),      WDIR      ))
+df5 = mutate(df5, WSPD.IMP    = ifelse(is.na(WSPD),  ifelse(is.na(lag.1.WSPD),  ifelse(is.na(lag.2.WSPD), ifelse(is.na(lag.3.WSPD), ifelse(is.na(lag.4.WSPD), lag.5.WSPD, lag.4.WSPD), lag.3.WSPD),    lag.2.WSPD) ,    lag.1.WSPD ),      WSPD      ))
+
+#df5
+dim(df5)
+
+
+```
+
+
+# 4c. create difference columns for all variables. Use .IMP variables as the input variables since these are the 'improved' versions. E.g. diff of NO2 since 6AM. 3AM. MIDNIGHT. 
+```{r}
+# function to create new column in data frame with differenced variables
+differenceColumnAdd = function(df, predictor, SinceTimeHoursNum){  
+  existColNames = colnames(df)
+  
+  dfSetHourOfDayValue = df %>% filter(TimeHoursNum==SinceTimeHoursNum) %>% select_('Date', predictor)   # get baseline hour of date - e.g. all NO2 concentrations at 6AM.
+  dfNew = inner_join(df,dfSetHourOfDayValue,by = c("Date" = "Date"))                                    # add baseline hour of date as new column 
+  
+  StaticTimeCol = paste0('TimeHoursNum.',SinceTimeHoursNum,'.',predictor)                               # create baseline hour column name. e.g. TimeHoursNum.6.NO2
+  colnames(dfNew) = c(existColNames, StaticTimeCol)
+  #colnames(dfNew)[length(dfNew)] = StaticTimeCol                                                        # update column header. i.e. the last column is the new one                                     
+  dfSetDiffValue = df[,predictor] - dfNew[,StaticTimeCol]               # calculate diff from e.g. 6AM NO2 baseline to current hour of each day. 
+  dfNew = cbind(dfNew,dfSetDiffValue)                                   # add differenced value to column in newly created df
+  dfNew = dfNew %>% select(-one_of(StaticTimeCol))                      # drop column with baseline hour of date value since no longer needed in df
+  
+  new_name = paste0('Diff.',predictor,'.','Base.',SinceTimeHoursNum)
+  colnames(dfNew)[length(dfNew)] = new_name                             # rename newly created differenced column to e.g. 'Diff.NO2.Since.6'
+  
+  return(dfNew)
+}
+
+df6 = differenceColumnAdd(df5, 'NO2', '6')        # note that '6' here is the 6AM time of day. 
+df6 = differenceColumnAdd(df6, 'NO.IMP', '6')
+df6 = differenceColumnAdd(df6, 'NOX.IMP', '6')
+df6 = differenceColumnAdd(df6, 'O3.IMP', '6')
+df6 = differenceColumnAdd(df6, 'PM10.IMP', '6')
+df6 = differenceColumnAdd(df6, 'SO2.IMP', '6')
+df6 = differenceColumnAdd(df6, 'BP.IMP', '6')
+df6 = differenceColumnAdd(df6, 'RAIN.IMP', '6')
+df6 = differenceColumnAdd(df6, 'RHUM.IMP', '6')
+df6 = differenceColumnAdd(df6, 'SOLR.IMP', '6')
+df6 = differenceColumnAdd(df6, 'TEMP.IMP', '6')
+df6 = differenceColumnAdd(df6, 'WDIR.IMP', '6')
+df6 = differenceColumnAdd(df6, 'WSPD.IMP', '6')
+
+# continue on using the function above for diff since 7am.
+df6 = differenceColumnAdd(df6, 'NO2',     '7')        # note that '7' here is the 7AM time of day. 
+df6 = differenceColumnAdd(df6, 'NO.IMP',  '7')
+df6 = differenceColumnAdd(df6, 'NOX.IMP', '7')
+df6 = differenceColumnAdd(df6, 'O3.IMP',  '7')
+df6 = differenceColumnAdd(df6, 'PM10.IMP','7')
+df6 = differenceColumnAdd(df6, 'SO2.IMP', '7')
+df6 = differenceColumnAdd(df6, 'BP.IMP',  '7')
+df6 = differenceColumnAdd(df6, 'RAIN.IMP','7')
+df6 = differenceColumnAdd(df6, 'RHUM.IMP','7')
+df6 = differenceColumnAdd(df6, 'SOLR.IMP','7')
+df6 = differenceColumnAdd(df6, 'TEMP.IMP','7')
+df6 = differenceColumnAdd(df6, 'WDIR.IMP','7')
+df6 = differenceColumnAdd(df6, 'WSPD.IMP','7')
+
+# continue on using the function above for diff since 8am.
+df6 = differenceColumnAdd(df6, 'NO2',      '8')        # note that '8' here is the 8AM time of day. 
+df6 = differenceColumnAdd(df6, 'NO.IMP',   '8')
+df6 = differenceColumnAdd(df6, 'NOX.IMP',  '8')
+df6 = differenceColumnAdd(df6, 'O3.IMP',   '8')
+df6 = differenceColumnAdd(df6, 'PM10.IMP', '8')
+df6 = differenceColumnAdd(df6, 'SO2.IMP',  '8')
+df6 = differenceColumnAdd(df6, 'BP.IMP',   '8')
+df6 = differenceColumnAdd(df6, 'RAIN.IMP', '8')
+df6 = differenceColumnAdd(df6, 'RHUM.IMP', '8')
+df6 = differenceColumnAdd(df6, 'SOLR.IMP', '8')
+df6 = differenceColumnAdd(df6, 'TEMP.IMP', '8')
+df6 = differenceColumnAdd(df6, 'WDIR.IMP', '8')
+df6 = differenceColumnAdd(df6, 'WSPD.IMP', '8')
+
+names(df6)
+
+```
+
+# 4d. for each date we need to calculate the hour of day where the max occurred.
+```{r}
+getDiffFromMaxConcentrationByDate = function(df, predictor){
+  existColNames = colnames(df)
+
+  dfSetMaxConcentrationByDate = df %>% select_('Date', predictor) %>% group_by(Date) %>% summarise_each(funs(max))
+  dfNew = inner_join(df,dfSetMaxConcentrationByDate,by = c("Date" = "Date"))                                    # add baseline hour of date as new column 
+  tempColName = paste0('max.',predictor)                                   # rename max field created to this name max.predictor
+  colnames(dfNew)[length(dfNew)] = tempColName                             # as above
+  colnames(dfNew) = c(existColNames, tempColName)                          # rename all variables in temp data frame to prior values plus new max var created
+  
+  dfSetDiffToMax = dfNew[,predictor] - dfNew[,tempColName] 
+  dfNew = cbind(dfNew,dfSetDiffToMax) 
+  dfNew = dfNew %>% select(-one_of(tempColName))
+  
+  newColName = paste0('diffToMax.',predictor,'.ByDate')
+  colnames(dfNew) = c(existColNames, newColName) 
+  
+  return(dfNew)
+}
+
+df7 = getDiffFromMaxConcentrationByDate(df6, 'NO2'     )        # calculate diff in hourly values from max value for each Date in df
+df7 = getDiffFromMaxConcentrationByDate(df7, 'NO.IMP'  )
+df7 = getDiffFromMaxConcentrationByDate(df7, 'NOX.IMP' )
+df7 = getDiffFromMaxConcentrationByDate(df7, 'O3.IMP'  )
+df7 = getDiffFromMaxConcentrationByDate(df7, 'PM10.IMP')
+df7 = getDiffFromMaxConcentrationByDate(df7, 'SO2.IMP' )
+df7 = getDiffFromMaxConcentrationByDate(df7, 'BP.IMP'  )
+df7 = getDiffFromMaxConcentrationByDate(df7, 'RAIN.IMP')
+df7 = getDiffFromMaxConcentrationByDate(df7, 'RHUM.IMP')
+df7 = getDiffFromMaxConcentrationByDate(df7, 'SOLR.IMP')
+df7 = getDiffFromMaxConcentrationByDate(df7, 'TEMP.IMP')
+df7 = getDiffFromMaxConcentrationByDate(df7, 'WDIR.IMP')
+df7 = getDiffFromMaxConcentrationByDate(df7, 'WSPD.IMP')
+
+
+names(df7)
+
+```
+
+
+# 4e. for each date we need the average of the prior 1,2,3,4,5,6,7 days?? --- is this linked to NO2 level on a specific day, or the likelihood that it will go above a certain level
+
+
+#Step 2: remove the NO2's that have NAs since this is the response variable. 
+To this point 
+- we have used the 1-3 hour imputed values. 
+
+Next 
+- rename the imputed values to the 'actual' so that naming of columns is neater
+- remove the dates that have 'NA' NO2 values since no response values should not be included in the modeling.
+
+
+START HERE NEXT JUNE 17 !!!  --- add lagged vars 1-3 into the data frame below next. 
+
+
+#IGNORE FOR NOW...
+```{r}
+names(df5)
+df5 = df5 %>% select(Date, Year, Month, Week,Day,TimeHoursNum,
+                     NO.IMP,NO2,NOX.IMP,O3.IMP,PM10.IMP,PM2.5.IMP,SO2.IMP,
+                     BP.IMP,RAIN.IMP,RHUM.IMP,SOLR.IMP,TEMP.IMP,WDIR.IMP,WSPD.IMP,
+                     # lag 1s-lag3s
+                     lag.1.NO:lag.3.WSPD)
+colnames(df5) = c('Date','Year','Month','Week','Day','TimeHoursNum',
+                  'NO','NO2','NOX','O3','PM10','PM2.5','SO2',
+                  'BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD')
+df5
+```
+
+
+
+REMOVE NA NO2 obs. 
+# IGNORE FOR NOW. 
+```{r}
+dim(df5)  # 78912    20
+df6 = df5[!is.na(df5$NO2), ]
+dim(df6)  # 71937    20
+
+
+
+
+```
+
+
+ONLY INCLUDE DAYS THAT HAVE ALL OF THE 24 HOURS - MUST ADD THE LAGGED VARIABLES FIRST!!!!!!!!
+```{r}
+dates.over.x.hours = df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==24)
+dates.over.x.hours = dates.over.x.hours[,1]
+
+df = inner_join(df,dates.over.x.hours,by = c("Date" = "Date"))
+dim(df)  # 46464 x 20 (for 24 hour days)
+
+# quick check that what I just did worked
+df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n<24) ## 0 rows returned = GOOD!!
+
+table(df$Year, df$Month)
+table(df$Year, df$Week)
+length(unique(df$Date)) # 1936 dates (when 24 hour days included ONLY)
+
+
+# All vars
+countMissing = sapply(df, function(x) sum(is.na(x)))
+percentMissing = round(apply(df, 2,function(col)sum(is.na(col))/length(col)),2)
+df.temp.missing = data.frame(countMissing, percentMissing)
+df.temp.missing = df.temp.missing[order(-percentMissing),]  # with ordering on desc percentMissing
+df.temp.missing
+
+
+##### TAKE 1 - ALL VARIABLES
+#calc number obs after removing all other NAs
+df6 = df
+dim(df6)
+df6 = na.omit(df6)
+dim(df6)   #7332  344
+
+# ##### TAKE 2 --- ALL VARIABLES without RHUM
+# # let's redo the above without RHUM since this has the highest number of missing variables
+# df6 = df %>% select(-RHUM, -BP)
+# names(df6)
+# dim(df6)
+# df6 = na.omit(df6)
+# dim(df6)   #10276    20   -> 17505    19 with RHUM removed. --> 23107 with RHUM and BP removed. not ideal as these are the QUITE EXPLANATORY vars ac to the theory books
+
+table(df6$Year, df6$Month)
+
+```
+
+<!-- Figure out which variables it makes sense to take the lagged t-1, t-2, and t-3 values. For correlations we need to remove the NA values first. This is slightly misleading since the NA values between two dates that are far apart may be problematic. May need to revert back to this, but we are trying here to get a sense of the correlation so i continue with the na.omit method for now. Alt: use count hourly obs that have the longest possible count of consec hours. -->
+
+<!-- NO.cor    = cor(df5 %>% select(NO,lag.1.NO,lag.2.NO,lag.3.NO, lag.4.NO, lag.5.NO))[1,] -->
+<!-- NO2.cor   = cor(df5 %>% select(NO2,lag.1.NO2,lag.2.NO2,lag.3.NO2, lag.4.NO2, lag.5.NO2))[1,] -->
+<!-- NOX.cor   = cor(df5 %>% select(NOX,lag.1.NOX,lag.2.NOX,lag.3.NOX, lag.4.NOX, lag.5.NOX))[1,] -->
+<!-- O3.cor    = cor(df5 %>% select(O3,lag.1.O3,lag.2.O3,lag.3.O3, lag.4.O3, lag.5.O3))[1,] -->
+<!-- PM10.cor  = cor(df5 %>% select(PM10,lag.1.PM10,lag.2.PM10,lag.3.PM10, lag.4.PM10, lag.5.PM10))[1,] -->
+<!-- PM2.5.cor = cor(df5 %>% select(PM2.5,lag.1.PM2.5,lag.2.PM2.5,lag.3.PM2.5, lag.4.PM2.5, lag.5.PM2.5))[1,] -->
+<!-- SO2.cor   = cor(df5 %>% select(SO2,lag.1.SO2,lag.2.SO2,lag.3.SO2, lag.4.SO2, lag.5.SO2))[1,] -->
+<!-- BP.cor    = cor(df5 %>% select(BP,lag.1.BP,lag.2.BP,lag.3.BP, lag.4.BP, lag.5.BP))[1,] -->
+<!-- RAIN.cor  = cor(df5 %>% select(RAIN,lag.1.RAIN,lag.2.RAIN,lag.3.RAIN, lag.4.RAIN, lag.5.RAIN))[1,] # not correlated at all!! -> best can do it take 0... the modal value. -->
+<!-- RHUM.cor  = cor(df5 %>% select(RHUM,lag.1.RHUM,lag.2.RHUM,lag.3.RHUM, lag.4.RHUM, lag.5.RHUM))[1,] -->
+<!-- SOLR.cor  = cor(df5 %>% select(SOLR,lag.1.SOLR,lag.2.SOLR,lag.3.SOLR, lag.4.SOLR, lag.5.SOLR))[1,] -->
+<!-- TEMP.cor  = cor(df5 %>% select(TEMP,lag.1.TEMP,lag.2.TEMP,lag.3.TEMP, lag.4.TEMP, lag.5.TEMP))[1,] -->
+<!-- WDIR.cor  = cor(df5 %>% select(WDIR,lag.1.WDIR,lag.2.WDIR,lag.3.WDIR, lag.4.WDIR, lag.5.WDIR))[1,] -->
+<!-- WSPD.cor  = cor(df5 %>% select(WSPD,lag.1.WSPD,lag.2.WSPD,lag.3.WSPD, lag.4.WSPD, lag.5.WSPD))[1,] -->
+
+```{r}
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df6, file.path(outfilePath,'greenwich_eltham_na_omit_w_na_lag1_lag2_lag3_imputed_hourly_B.csv'))
+```
+
+
+
+
+
+## THIS WAS THE part2.Rmd file work below. 
+
+### Data Quality Check
+The air quality data set consists of 11392 hourly observations across 13 variables. The data set consists of six different pollutants (NO, NO2, NOX, O3, P2.5, and PM10) and five different meterological variables (BP, SOLR, TMP, WDIR, and WSPD), and Time. The node is based in Greenwich Eltham, London. The original data set consisted of five years, but I have only included observations where a value for each pollutant and meterological variable exists. The observations are taken of hourly (15 min averages) observations.  
+
+
+<!-- # Narrow down the data set to be school hours and week days only -->
+<!-- # STEP 2: REDUCE THE DATA SET WEEK DAYS: MON-FRI and SCHOOL HOURS: between 9AM - 4PM. -->
+
+```{r}
+df = df6 %>% filter(Day!='Saturday' & Day!='Sunday' & (TimeHoursNum>=6 & TimeHoursNum<=16) )
+table(df$Year, df$Month)
+dim(df)  # 2210  344
+```
+
+
+** NOT SO SURE WE NEED TO DO THIS BIT ** 
+# Part 2: reduce year 2009 to those weeks with 5 full days - repeat for 2010 then combine the two data frames 
+```{r}
+# create copy
+#df = df.fullday
+
+table(df$Year, df$Month)
+
+# # 2009 first
+# df.2009 = df %>% filter(Year==2009)
+# df.2009.tmp = df %>% filter(Year==2009) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+# df.2009.tmp = df.2009.tmp[,1]
+# df.2009.fullweek = inner_join(df.2009,df.2009.tmp,by = c("Week" = "Week"))
+# dim(df.2009.fullweek)  # 280 53
+
+# 2010 second
+df.2010 = df %>% filter(Year==2010)
+df.2010.tmp = df %>% filter(Year==2010) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2010.tmp = df.2010.tmp[,1]
+df.2010.fullweek = inner_join(df.2010,df.2010.tmp,by = c("Week" = "Week"))
+dim(df.2010.fullweek)  # 200 53  -> 110 62
+
+# 2011
+df.2011 = df %>% filter(Year==2011)
+df.2011.tmp = df %>% filter(Year==2011) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2011.tmp = df.2011.tmp[,1]
+df.2011.fullweek = inner_join(df.2011,df.2011.tmp,by = c("Week" = "Week"))
+dim(df.2011.fullweek)  # 200 53  -> 0 62
+
+# 2012
+df.2012 = df %>% filter(Year==2012)
+df.2012.tmp = df %>% filter(Year==2012) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2012.tmp = df.2012.tmp[,1]
+df.2012.fullweek = inner_join(df.2012,df.2012.tmp,by = c("Week" = "Week"))
+dim(df.2012.fullweek)  #1155  62
+
+# 2013
+df.2013 = df %>% filter(Year==2013)
+df.2013.tmp = df %>% filter(Year==2013) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2013.tmp = df.2013.tmp[,1]
+df.2013.fullweek = inner_join(df.2013,df.2013.tmp,by = c("Week" = "Week"))
+dim(df.2013.fullweek)  # 1155  62
+
+# 2014
+df.2014 = df %>% filter(Year==2014)
+df.2014.tmp = df %>% filter(Year==2014) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
+df.2014.tmp = df.2014.tmp[,1]
+df.2014.fullweek = inner_join(df.2014,df.2014.tmp,by = c("Week" = "Week"))
+dim(df.2014.fullweek)  #440  62
+
+
+
+df.fullweek.fullday = rbind(df.2010.fullweek,df.2011.fullweek,df.2012.fullweek,
+                            df.2013.fullweek,df.2014.fullweek)
+dim(df.fullweek.fullday) # 480 53 -> 2860 62
+length(unique(df.fullweek.fullday$Date)) # 90 days -> 260 dates
+dim(df.fullweek.fullday) # 2860   62
+
+table(df.fullweek.fullday$Year, df.fullweek.fullday$Month)
+dim(df.fullweek.fullday) # 2860   62
+
+
+```
+
+
+
+# STEP 6: EXPORT CSV
+```{r}
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+#write.csv(df.fullweek.fullday, file.path(outfilePath,'greenwich_eltham_school_hours.csv'))
+write.csv(df.fullweek.fullday, file.path(outfilePath,'greenwich_eltham_imputed_school_hours.csv'))
+```
+
+
+

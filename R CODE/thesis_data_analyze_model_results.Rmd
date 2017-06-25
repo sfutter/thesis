@@ -1,0 +1,147 @@
+---
+title: "analyze results"
+author: "Steven Futter"
+date: "5/2/2017"
+output: html_document
+---
+
+GOAL: BUILD AN MAE SCORING PLOT FOR EACH OF THE THREE MODELS TRAINING/TEST MAE
+
+- SEE PLOT BELOW FOR THE FORWARD VAR SELECT MODEL
+- OVERLAY RANDOM FOREST VAR SELECT MODEL TRAINING/TESTING MAE
+- OVERLAY NN SELECT MODEL TRAINING/TEST MAE
+
+SO WHAT? 
+
+END - SO I CAN SAY WHICH IS BEST OR HAS THE LOWEST MAE THEN RIDE OFF INTO SUNSET (I MEAN CONCLUSION)
+ - ONCE I KNOW WHICH MODEL HAS THE LOWEST MAE I CAN TALK ABOUT
+   - WHAT VARIABLES ARE CONSIDERED IMPORTANT
+   - INTERESTING RESULTS... MAE FOR 9AM IS HIGHER FOR ALL POLLUTANTS ... WHY MIGHT THIS BE?
+   - WHICH MODEL IS BETTER THAN ANOTHER AND WHY THAT MIGHT BE
+   
+ONCE I'VE SELECTED THE BEST MODEL I CAN TAKE A TYPICAL DAY(S) THEN FIGURE OUT WHAT THE PEAK HOUR MAY BE. 
+ONCE I'VE SELECTED THE BEST MODEL I CAN TAKE A TYPICAL DAY(S) THEN FIGURE OUT HOW ACCURATE THE SELECTED MODEL. OUT OF 100 DAYS HOW MANY TIMES DID WE PREDICT THE PEAK HOUR?? I.E. PEAK HOUR BY RUNNING REGRESSION THEN CALCULATING THE MAX NUMBER. THEN SEEING IF THIS WAS LINKED TO MAX NUMBER PER DAY IN THE VALIDATION SET OF E.G. 100 DAYS.
+
+
+```{r}
+library(dplyr)
+library(plotly)
+inPathResults = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS") # Home path
+df = read.csv(file.path(inPathResults,"results.csv"),na.strings=c("NA"," "))
+
+head(df)
+names(df)
+df
+dataTrainFwd = df %>% select(Model, Data.Set, Response, MAE, TimeOfDay) %>% filter(Data.Set=='Training' & Response=='NO2' & grepl('Forward',Model)) 
+dataTrainFwd
+dataTestFwd = df %>% select(Model, Data.Set, Response, MAE, TimeOfDay) %>% filter(Data.Set=='Testing' & Response=='NO2' & grepl('Forward',Model)) 
+dataTestFwd
+
+dataTrainBwd = df %>% select(Model, Data.Set, Response, MAE, TimeOfDay) %>% filter(Data.Set=='Training' & Response=='NO2' & grepl('Backward',Model)) 
+dataTrainBwd
+dataTestBwd = df %>% select(Model, Data.Set, Response, MAE, TimeOfDay) %>% filter(Data.Set=='Testing' & Response=='NO2' & grepl('Backward',Model)) 
+dataTestBwd
+
+dataTrainStep = df %>% select(Model, Data.Set, Response, MAE, TimeOfDay) %>% filter(Data.Set=='Training' & Response=='NO2' & grepl('Stepwise',Model)) 
+dataTrainStep
+dataTestStep = df %>% select(Model, Data.Set, Response, MAE, TimeOfDay) %>% filter(Data.Set=='Testing' & Response=='NO2' & grepl('Stepwise',Model)) 
+dataTestStep
+
+data = cbind(dataTrainFwd %>% select(MAE, TimeOfDay) %>% rename(MAE.Train.Fwd = MAE), 
+             dataTestFwd  %>% select(MAE)            %>% rename(MAE.Test.Fwd  = MAE),
+             dataTrainBwd  %>% select(MAE)            %>% rename(MAE.Train.Bwd  = MAE),
+             dataTestBwd  %>% select(MAE)            %>% rename(MAE.Test.Bwd  = MAE),
+             dataTrainStep %>% select(MAE)            %>% rename(MAE.Train.Step = MAE),
+             dataTestStep %>% select(MAE)            %>% rename(MAE.Test.Step = MAE))
+data
+
+p <- plot_ly(data, x = ~TimeOfDay, y = ~MAE.Train.Fwd, name = 'MAE Training Forward Variable Selection', type = 'scatter', mode = 'lines+markers')  %>%
+                         add_trace(y = ~MAE.Test.Fwd,  name = 'MAE Testing Forward Variable Selection', mode = 'lines+markers') %>%
+                         add_trace(y = ~MAE.Train.Bwd, name = 'MAE Training Backward Variable Selection', mode = 'lines+markers') %>%
+                         add_trace(y = ~MAE.Test.Bwd,  name = 'MAE Testing Backward Variable Selection', mode = 'lines+markers') %>%
+                         add_trace(y = ~MAE.Train.Step,name = 'MAE Training Stepwise Variable Selection', mode = 'lines+markers') %>%
+                         add_trace(y = ~MAE.Test.Step, name = 'MAE Testing Stepwise Variable Selection', mode = 'lines+markers') %>%
+  layout(title = "Mean Absolute Error NO2: forward variable selection model",
+         xaxis = list(title = "Time of Day (24-Hour Clock)"),
+         yaxis = list (title = "MAE"))
+p
+
+```
+
+
+# note - based upon the outpout in the p plot below we can see that the 'test' MAE is lowest for the Forward Variable Selection Model. Let's now take a new section to produce the hourly predictions for 10 days using the 'test' data set. 
+
+1. pick a model - to begin we pick the 9AM forward variable selection model. 
+2. run the model on a selection of days in the 'test' data set.               ** THIS NEEDS TO BE A VALIDATION SET EVENTUALLY **
+
+
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+modelPath = file.path("/Users","stevenfutter","Dropbox","NU","THESIS","MODELS")
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3.R"))
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours.csv"),na.strings=c("NA"," "))
+df
+
+# Validation set
+df.validation    = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==9)
+df.validation.10 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==10)
+df.validation.11 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==11)
+df.validation.12 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==12)
+df.validation.13 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==13)
+df.validation.14 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==14)
+df.validation.15 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==15)
+df.validation.16 = df %>% filter(Date=='2012-10-29') %>% filter(TimeHoursNum==16)
+
+# Calculate testing error
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_9_forwards.Rdata'))
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_10_forwards.Rdata'))
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_11_forwards.Rdata'))
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_12_forwards.Rdata'))
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_13_forwards.Rdata'))
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_14_forwards.Rdata'))
+model  = readRDS(file.path(modelPath,'model_response_NO2_hour_15_forwards.Rdata'))
+
+#model  = readRDS(file.path(modelPath,'model_response_NO2_hour_16_forwards.Rdata'))
+
+df.validation$Year = as.factor(df.validation$Year)
+predictions.test = predict(model, newdata=df.validation)
+#hourlyResults   = cbind(df.validation, predictions.test)
+#hourlyResults   = cbind(df.validation.10, predictions.test)
+#hourlyResults   = cbind(df.validation.11, predictions.test)
+#hourlyResults   = cbind(df.validation.12, predictions.test)
+#hourlyResults   = cbind(df.validation.13, predictions.test)
+#hourlyResults   = cbind(df.validation.14, predictions.test)
+hourlyResults   = cbind(df.validation.15, predictions.test)
+#hourlyResults   = cbind(df.validation.16, predictions.test)
+#hourlyResults
+
+# APPEND EACH NEW HOUR OF THE DAY INTO THIS TABLE: df.test.results
+#df.test.results = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+#df.test.results.10 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+#df.test.results.11 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+#df.test.results.12 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+#df.test.results.13 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+#df.test.results.14 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+df.test.results.15 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+#df.test.results.16 = hourlyResults %>% select(NO2,predictions.test,Date,TimeHoursNum,Year,Month,Week,Day)
+
+
+#df.test.results = rbind(df.test.results, df.test.results.10)
+#df.test.results = rbind(df.test.results, df.test.results.11)
+#df.test.results = rbind(df.test.results, df.test.results.12)
+#df.test.results = rbind(df.test.results, df.test.results.13)
+#df.test.results = rbind(df.test.results, df.test.results.14)
+#df.test.results = rbind(df.test.results, df.test.results.15)
+#df.test.results = rbind(df.test.results, df.test.results.16)
+
+df.test.results
+
+
+
+## NEXT: need to rank each hour of day so that have max - min. For each day you have a rank actual and rank predicted -> repeat for a number of 'validation' days... then move onto another pollutant, then move onto another model. then write up findings.
+
+
+
+```
