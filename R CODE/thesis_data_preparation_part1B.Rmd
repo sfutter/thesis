@@ -361,13 +361,56 @@ df7 = getDiffFromMaxConcentrationByDate(df7, 'TEMP.IMP')
 df7 = getDiffFromMaxConcentrationByDate(df7, 'WDIR.IMP')
 df7 = getDiffFromMaxConcentrationByDate(df7, 'WSPD.IMP')
 
-
 names(df7)
 
 ```
 
 
-# 4e. for each date we need the average of the prior 1,2,3,4,5,6,7 days?? --- is this linked to NO2 level on a specific day, or the likelihood that it will go above a certain level
+
+# 4e. for each date we need to calculate the slope between 5-8am 
+```{r}
+getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
+  
+  existColNames = colnames(df)
+  dfSet5AMConcentrationByDate = df %>% filter(TimeHoursNum==startTime) %>% select_('Date', predictor) 
+  dfSet8AMConcentrationByDate = df %>% filter(TimeHoursNum==endTime) %>% select_('Date', predictor)
+  dfTemp = inner_join(dfSet5AMConcentrationByDate, dfSet8AMConcentrationByDate, by = c("Date" = "Date"))
+  tempColName1 = paste0('TimeHoursNum.',startTime,'.',predictor)                                                    
+  tempColName2 = paste0('TimeHoursNum.',endTime,'.',predictor)                                   
+  colnames(dfTemp) = c('Date',tempColName1, tempColName2)
+  
+  tempColName3 = paste0('5amTo8amSlope.',predictor)                                   
+  slopeColName = (dfTemp[,tempColName2] - dfTemp[,tempColName1])/4     # 8am concentration minus 5am concentration /4 (since 4 hours imbetween)
+  dfTemp = cbind(dfTemp, slopeColName)
+  colnames(dfTemp) = c('Date',tempColName1, tempColName2, tempColName3)
+  dfTemp = dfTemp[,c(1,4)]  # i.e. the Date column and the new slope column, only!
+  
+  # to this point you have Date, e.g. slope 5am to 8am NO2 stored into dfTemp
+  dfNew = inner_join(df,dfTemp,by = c("Date" = "Date"))   
+  return(dfNew)
+  
+}
+
+df8 = getSlopeFrom5To8amByDate(df7, 'NO2'     , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'NO.IMP'  , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'NOX.IMP' , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'O3.IMP'  , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'PM10.IMP', 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'SO2.IMP' , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'BP.IMP'  , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'RAIN.IMP', 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'RHUM.IMP', 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'SOLR.IMP', 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'TEMP.IMP', 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'WDIR.IMP', 5, 8)
+df8 = getSlopeFrom5To8amByDate(df8, 'WSPD.IMP', 5, 8)
+names(df8)
+#dim(df8)
+
+```
+
+
+# 4f?. for each date we need the average of the prior 1,2,3,4,5,6,7 days?? --- is this linked to NO2 level on a specific day, or the likelihood that it will go above a certain level
 
 
 #Step 2: remove the NO2's that have NAs since this is the response variable. 
