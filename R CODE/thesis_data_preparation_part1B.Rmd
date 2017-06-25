@@ -371,6 +371,7 @@ names(df7)
 ```{r}
 getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
   
+  
   existColNames = colnames(df)
   dfSet5AMConcentrationByDate = df %>% filter(TimeHoursNum==startTime) %>% select_('Date', predictor) 
   dfSet8AMConcentrationByDate = df %>% filter(TimeHoursNum==endTime) %>% select_('Date', predictor)
@@ -379,8 +380,9 @@ getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
   tempColName2 = paste0('TimeHoursNum.',endTime,'.',predictor)                                   
   colnames(dfTemp) = c('Date',tempColName1, tempColName2)
   
-  tempColName3 = paste0('5amTo8amSlope.',predictor)                                   
-  slopeColName = (dfTemp[,tempColName2] - dfTemp[,tempColName1])/4     # 8am concentration minus 5am concentration /4 (since 4 hours imbetween)
+  tempColName3 = paste0('5amTo8amSlope.',predictor) 
+  slopeDivisor = endTime - startTime
+  slopeColName = (dfTemp[,tempColName2] - dfTemp[,tempColName1])/slopeDivisor     # 8am concentration minus 5am concentration /3 (since 3 hours imbetween)
   dfTemp = cbind(dfTemp, slopeColName)
   colnames(dfTemp) = c('Date',tempColName1, tempColName2, tempColName3)
   dfTemp = dfTemp[,c(1,4)]  # i.e. the Date column and the new slope column, only!
@@ -391,7 +393,7 @@ getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
   
 }
 
-df8 = getSlopeFrom5To8amByDate(df7, 'NO2'     , 5, 8)
+df8 = getSlopeFrom5To8amByDate(df7, 'NO2'     , 5, 8)   # takes 5 am to 8am slope
 df8 = getSlopeFrom5To8amByDate(df8, 'NO.IMP'  , 5, 8)
 df8 = getSlopeFrom5To8amByDate(df8, 'NOX.IMP' , 5, 8)
 df8 = getSlopeFrom5To8amByDate(df8, 'O3.IMP'  , 5, 8)
@@ -405,8 +407,7 @@ df8 = getSlopeFrom5To8amByDate(df8, 'TEMP.IMP', 5, 8)
 df8 = getSlopeFrom5To8amByDate(df8, 'WDIR.IMP', 5, 8)
 df8 = getSlopeFrom5To8amByDate(df8, 'WSPD.IMP', 5, 8)
 names(df8)
-#dim(df8)
-
+dim(df8)
 ```
 
 
