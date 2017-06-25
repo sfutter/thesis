@@ -370,8 +370,6 @@ names(df7)
 # 4e. for each date we need to calculate the slope between 5-8am 
 ```{r}
 getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
-  
-  
   existColNames = colnames(df)
   dfSet5AMConcentrationByDate = df %>% filter(TimeHoursNum==startTime) %>% select_('Date', predictor) 
   dfSet8AMConcentrationByDate = df %>% filter(TimeHoursNum==endTime) %>% select_('Date', predictor)
@@ -411,7 +409,18 @@ dim(df8)
 ```
 
 
-# 4f?. for each date we need the average of the prior 1,2,3,4,5,6,7 days?? --- is this linked to NO2 level on a specific day, or the likelihood that it will go above a certain level
+# 4f - part 1. for each date we need the diff in hourly value in comparison to the monthly average. 
+q. do i use the actual month here or the prior 30 days of values..??? i would expect that the prior 30 days would be more meaningful. If i do this then i will lose a lot of values since there will be many NAs. Therefore, i need to ensure that i collect the previous 30 days of values and then ONLY calculate a value if a threshold of e.g. 20 of the 30 days if available. See part 2 of 4f for the calc of prior 30 days with min threshold of number of days that need data for the mean to be calculated. 
+- part 1 is just the mean of each month (but how many values do i need in each month --- 20?? )
+```{r}
+str(df8)
+df8 %>% select(Year, NO2) %>% group_by(Year) %>% summarise_each(funs(mean(., na.rm = TRUE)))
+# no2.hourly.avg.feb.2013 = df %>% filter(Year=='2013' & Month=='2') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+```
+
+# 4f - part 2. for each date we need the diff in hourly value in comparison to the monthly average. 
+q. do i use the actual month here or the prior 30 days of values..??? i would expect that the prior 30 days would be more meaningful. If i do this then i will lose a lot of values since there will be many NAs. Therefore, i need to ensure that i collect the previous 30 days of values and then ONLY calculate a value if a threshold of e.g. 20 of the 30 days if available. See part 2 of 4f for the calc of prior 30 days with min threshold of number of days that need data for the mean to be calculated. 
+
 
 
 #Step 2: remove the NO2's that have NAs since this is the response variable. 
@@ -445,12 +454,14 @@ df5
 REMOVE NA NO2 obs. 
 # IGNORE FOR NOW. 
 ```{r}
-dim(df5)  # 78912    20
-df6 = df5[!is.na(df5$NO2), ]
-dim(df6)  # 71937    20
+dim(df8)  # 78912    409
+df9 = df8[!is.na(df8$NO2), ]
+dim(df9)  # 71937    409
 
-
-
+dim(df8)
+df9 = na.omit(df8)
+dim(df9)
+table(df9$Year,df9$Month)
 
 ```
 
