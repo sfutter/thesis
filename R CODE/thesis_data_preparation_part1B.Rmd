@@ -181,6 +181,7 @@ colnames(df3) = c('Site','NO','NO2','NOX','O3','PM10','PM2.5','SO2','BP','RAIN',
                   'SOLR','TEMP','WDIR','WSPD','TimeHoursNum','Date')
 dim(df3)
 str(df3)
+df3
 
 ```
 
@@ -194,9 +195,10 @@ df4$Year = as.numeric(format(df4$Date,'%Y'))                # Get Year and Month
 df4$Month = as.numeric(format(df4$Date,'%m'))
 df4$Week = as.numeric(format(df4$Date,'%W'))
 df4$Day <- as.factor(weekdays(df4$Date))
+df4$MMYYYY <- as.character(format(df4$Date, "%m/%Y"))
 
-df4 = df4 %>% select(Date, Year, Month, Week, Day, TimeHoursNum,NO:WSPD)
-dim(df4) # 78912 x 20
+df4 = df4 %>% select(Date, MMYYYY, Year, Month, Week, Day, TimeHoursNum,NO:WSPD)
+dim(df4) # 78912 x 21
 names(df4)
 head(df4)
 ```
@@ -409,14 +411,87 @@ dim(df8)
 ```
 
 
-# 4f - part 1. for each date we need the diff in hourly value in comparison to the monthly average. 
-q. do i use the actual month here or the prior 30 days of values..??? i would expect that the prior 30 days would be more meaningful. If i do this then i will lose a lot of values since there will be many NAs. Therefore, i need to ensure that i collect the previous 30 days of values and then ONLY calculate a value if a threshold of e.g. 20 of the 30 days if available. See part 2 of 4f for the calc of prior 30 days with min threshold of number of days that need data for the mean to be calculated. 
-- part 1 is just the mean of each month (but how many values do i need in each month --- 20?? )
+# 4f - for each month we calculate the mean concentrations. then we calc the diff in the value from the mean. 
 ```{r}
-str(df8)
-df8 %>% select(Year, NO2) %>% group_by(Year) %>% summarise_each(funs(mean(., na.rm = TRUE)))
-# no2.hourly.avg.feb.2013 = df %>% filter(Year=='2013' & Month=='2') %>% select(TimeHoursNum,NO2) %>% group_by(TimeHoursNum) %>% summarise_each(funs(mean))
+df9 = na.omit(df8)                                                                   # remove the NAs since only care about rows which have all observations. 
+dates.over.x.hours = df9 %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==24)   # remove any dates that have less than 24 hours of observations. 
+dates.over.x.hours = dates.over.x.hours[,1]                                          
+dates.over.x.hours                                                                   # 237 dates with 24 hours of observations
+
+# 6208  409 (for >=18 hour days = 75% or more of hours in day present)             ==> 5688 obs for 24 hours in a day. 5688 / 24 = 237 days (matches above..! good.)
+df10 = inner_join(df9, dates.over.x.hours, by = c("Date" = "Date"))
+dim(df10)  
+
+months.over.x.days = df10 %>% group_by(MMYYYY) %>% summarise(n=round(n()/24)) %>% filter(n>=10)   # of the dates that have 24 hours of obs 11 months exist between 2008-2016
+months.over.x.days = months.over.x.days[,1]                                                       # that have >= 10 dates present
+months.over.x.days                                                                                
+
+# let's create a function that can calculate the mean concentration level for each and add that to the df10 data.frame.
+df11 = inner_join(df10, months.over.x.days, by = c("MMYYYY","MMYYYY"))
+dim(df11)                                                                                         # 185 dates in total which is 4440 observations in total
+
+calculateMonthlyAverage = function(df, predictor) {
+  existColNames = colnames(df)
+  datesWithMeansDf = df %>% select_('MMYYYY', predictor) %>% group_by_('MMYYYY') %>% summarise_each(funs(mean))
+  datesWithMeansDfColName = paste0('Mean.Monthly.',predictor)                                                    
+  colnames(datesWithMeansDf) = c('MMYYYY',datesWithMeansDfColName)
+  dfNew = inner_join(df, datesWithMeansDf, by = c("MMYYYY" = "MMYYYY"))
+  return(dfNew)
+}
+
+df12 = calculateMonthlyAverage(df11, 'NO2')
+df12 = calculateMonthlyAverage(df12, 'NO.IMP')
+df12 = calculateMonthlyAverage(df12, 'NOX.IMP')
+df12 = calculateMonthlyAverage(df12, 'O3.IMP')
+df12 = calculateMonthlyAverage(df12, 'PM10.IMP')
+df12 = calculateMonthlyAverage(df12, 'SO2.IMP')
+df12 = calculateMonthlyAverage(df12, 'BP.IMP')
+df12 = calculateMonthlyAverage(df12, 'RAIN.IMP')
+df12 = calculateMonthlyAverage(df12, 'RHUM.IMP')
+df12 = calculateMonthlyAverage(df12, 'SOLR.IMP')
+df12 = calculateMonthlyAverage(df12, 'TEMP.IMP')
+df12 = calculateMonthlyAverage(df12, 'WDIR.IMP')
+df12 = calculateMonthlyAverage(df12, 'WSPD.IMP')
+
+
 ```
+
+# 4g. for each hours obs we need to calculate the diff from the mean concentration for each month
+```{r}
+getDiffFromMeanMonthlyConcentration = function(df, predictor){
+  existColNames = colnames(df)
+  tempColName = paste0('Mean.Monthly.',predictor)
+  
+  dfSetDiffToMean = df[,predictor] - df[,tempColName]
+  dfNew = cbind(df,dfSetDiffToMean) 
+  #dfNew = dfNew %>% select(-one_of(tempColName))
+  
+  newColName = paste0('diffToMean.Monthly.',predictor)
+  colnames(dfNew) = c(existColNames, newColName) 
+  
+  return(dfNew)
+}
+
+df13 = getDiffFromMeanMonthlyConcentration(df12, 'NO2'     ) # calculate diff in hourly values from max value for each Date in df
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'NO.IMP'  )
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'NOX.IMP' )
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'O3.IMP'  )
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'PM10.IMP')
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'SO2.IMP' )
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'BP.IMP'  )
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'RAIN.IMP')
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'RHUM.IMP')
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'SOLR.IMP')
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'TEMP.IMP')
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'WDIR.IMP')
+df13 = getDiffFromMeanMonthlyConcentration(df13, 'WSPD.IMP')
+
+names(df13)
+head(df13)
+```
+
+
+
 
 # 4f - part 2. for each date we need the diff in hourly value in comparison to the monthly average. 
 q. do i use the actual month here or the prior 30 days of values..??? i would expect that the prior 30 days would be more meaningful. If i do this then i will lose a lot of values since there will be many NAs. Therefore, i need to ensure that i collect the previous 30 days of values and then ONLY calculate a value if a threshold of e.g. 20 of the 30 days if available. See part 2 of 4f for the calc of prior 30 days with min threshold of number of days that need data for the mean to be calculated. 
