@@ -1,0 +1,232 @@
+---
+title: "neural network model"
+author: "Steven Futter"
+date: "5/30/2017"
+output: html_document
+---
+
+# MODEL 3: ANN using H2O - multinomial classification
+http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/index.html
+Useful tutorial: https://github.com/h2oai/h2o-tutorials/tree/master/tutorials/deeplearning
+
+
+ONLY NEED THIS ON FIRST RUN THROUGH
+```{r}
+# The following two commands remove any previously installed H2O packages for R.
+if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) }
+if ("h2o" %in% rownames(installed.packages())) { remove.packages("h2o") }
+
+# Next, we download packages that H2O depends on.
+if (! ("methods" %in% rownames(installed.packages()))) { install.packages("methods") }
+if (! ("statmod" %in% rownames(installed.packages()))) { install.packages("statmod") }
+if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") }
+if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") }
+if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") }
+if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") }
+if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") }
+if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") }
+
+# Now we download, install and initialize the H2O package for R.
+install.packages("h2o", type="source", repos=(c("http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/R")))
+library(h2o)
+localH2O = h2o.init(nthreads=-1)
+```
+
+################################################################################################################################################
+#### PART 1 - Predict NO2 using current and lagged variables, mean month imputed variables, and slope variables for the early morning ##########
+#### PART 2 - (see "thesis_data_model_nn_one_hour_ahead_take2.Rmd" file"
+####          Predict NO2 using lagged variables, mean month imputed variables, and slope variables for the early morning             ##########
+################################################################################################################################################
+
+################################################################################################################################
+#### PART 1 
+#### run ann on all current, lagged variables, mean monthly imputed variables, and slope variables for the early morning
+################################################################################################################################
+
+
+```{r}
+library(dplyr)
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
+
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR')
+
+df = df %>% select(NO2, 
+                    Time, Year, Month, TimeHoursNum,                  # date Time variables
+                    lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                    NO.IMP:WSPD.IMP,                                  # current hour imputed variables
+                    Mean.Monthly.NO2.IMP:Mean.Monthly.WSPD.IMP,       # mean monthly concentration levels
+                    Mean.Hourly.Concentration.By.MMYYYY.NO2.IMP: Mean.Hourly.Concentration.By.MMYYYY.WSPD.IMP, # mean monthly concentration levels
+                    X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP,  # slope of variables from 2 to 5am and 5am to 8am. 
+                   -NO2.IMP)
+names(df)
+dim(df)   # 1936 x 126
+```
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+```{r}
+# First -- set aside the validation data - i.e. dates/hours after jan 2014
+#df$Date = as.Date(df$Date)
+validationDf = df %>% filter(Year >= 2014)
+dim(validationDf) # 242 145
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS")
+write.csv(validationDf, file.path(outfilePath,'validationDf_data_ann.csv'))
+
+# Second -- divide the remaining df between training and testing using an 80-20 split
+nonValidationDf = df %>% filter(Year < 2014)
+dim(nonValidationDf) # 1694  145
+
+df = nonValidationDf
+# for this we do a 70, 20, 10% split. For presentation purposes we need the final 10% of data to be whole week/days. 
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+df.train = df[train,]
+df.test  = df[-train,]
+df.vali = validationDf
+
+# response[1] = NO2
+for (i in 1:1){  # i.e. NO2
+  # these vectors are needed for the modeling results rmd
+  print(response[i])
+  df.train.y = df[train,c(i)]
+  df.test.y  = df[-train,c(i)]
+}
+
+dim(df.train)    # 1185  145
+dim(df.test)     #  509  145
+dim(df.vali)     #  242 126 
+```
+
+# Train ANN then calculate train / test MSE
+########################################################################
+# MODEL 1: ANN that uses half as many hidden nodes as variable inputs. 
+########################################################################
+```{r}
+#library(h2o) # ONLY NEED ON FIRST RUN THROUGH
+#h2o.init()   # ONLY NEED ON FIRST RUN THROUGH
+df.train.hex <- as.h2o(df.train)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# I use a rule of thumb that the hidden nodes should be half as columns
+colcount    = dim(df.train.hex)[2]
+hiddencount = round(dim(df.train.hex)[2]/2)  # need to run the neural network with half as many hidden nodes as input nodes
+df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, hidden=c(hiddencount), variable_importances = TRUE)
+summary(df.train.dl)
+
+# make a prediction here
+predictions.train <- h2o.predict(df.train.dl, df.train.hex)
+predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
+predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
+
+# TRAINING: evaluate the quality of prediction here
+df.train.mae = mean(abs(predictions.train-df.train.hex$NO2))
+df.train.mae         # 1. 1.612952 NO2
+
+# TESTING: evaluate the quality of the prediction using the test data set:
+df.test.mae = mean(abs(predictions.test-df.test.hex$NO2))
+df.test.mae          # 2.136125 NO2
+
+df.vali.mae = mean(abs(predictions.vali-df.vali.hex$NO2))
+df.vali.mae          # 4.970878 NO2
+
+```
+
+
+# Export the data prediction for the testing and validation data sets.
+```{r}
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS", "CURRENT_PREDICTIONS")
+
+filenameTrain = paste0('greenwich_eltham_',response[i],'_ann_train.csv')
+filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test.csv')
+filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali.csv')
+
+filenameTrain
+filenameTest
+filenameVali
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+write.csv(dfExportTest, file.path(outfilePath,filenameTrain))
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex))
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))
+
+# RETRIEVE VARIABLE IMPORTANCES
+h2o.varimp(df.train.dl)  # need to figure out how to create deviance and var importance plots in same manner as working group.
+
+```
+
+
+# Plot graphs of predicted vs actual
+```{r}
+
+names(dfExportVali) 
+library(plotly)
+
+f <- list(
+  family = "Courier New, monospace",
+  size = 18,
+  color = "#7f7f7f"
+)
+x <- list(
+  title = "Hour of Day",
+  titlefont = f
+)
+y <- list(
+  title = "Average Hourly NO2",
+  titlefont = f
+)
+
+p <- plot_ly(dfExportVali, x = ~Time, y=~NO2, name = 'NO2', type='scatter', mode='lines+markers') %>%      
+  add_trace(y = ~predict, name = 'Prediction NO2',mode = 'lines+markers') %>%
+  add_trace(y = ~Mean.Monthly.NO2.IMP, name = 'Mean Monthly NO2',mode = 'lines+markers') %>%
+  add_trace(y = ~Mean.Hourly.Concentration.By.MMYYYY.NO2.IMP, name = 'Mean Hourly By MMYYYY NO2',mode = 'lines+markers') %>%
+  layout(title = "Average Hourly NO2 ",
+         xaxis = list(title  = "Hour of Day (24 Hour Clock)"),
+         yaxis = list (title = "Average Hourly NO2 Concentration (µg/m3)"))
+p
+
+```
+
+
+
+
+
+
+HAVE TO MAKE THE TOOL APPLICABLE --- IT IS ONLY APPLICABLE IF THERE ARE ANSWERS TO RESPONSE VALUES WHEN LIMITED INPUTS. HOW TO MAKE THIS APPLICABLE IN REAL WORLD????? Use of imputed values and MISSING VALUES topic of discussion. 
+
+
+
+
+
+
+What am I trying to do?
+part 1a. Predict each variable - all current hour variables included
+
+
+
+Predict 1-hour ahead  -  no current with 1-5 hour lags
+Need to iterate through starting with 9am predictions and t-1 to 3s. Then, 10am predictions use t-1 to 3s but with 9am prediction as imputed. Just need a way to update t minus 1-3 variable names so next hour predict is always 'ok'. 
+
+For 1-to-# hours forward use the trained model with no current variables included to calc 9am-4pm schedule of each variable. Start with NO2 9am and continue on to 9am NO etc. Once all 9am values predicted need to update the data frame headers so that all predicted variable columns are renamed to lag.1.hour, then rename existing lag1-5 to lag2-5. Then-rerun prediction for next hour ahead and call it lag.1.hour and so on. Keep predicting until looped x hours forward. 
+
+Show diff hidden levels for ann vs diff number nodes at each level. 
+
+Show some maths and detail behind the neural net model used. 
+
+Write about the cars traffic variable not being included plus distance from road or street setup in relation to wind or car speed 
+
+Show average day hourly prediction in month and how that would not point out a big spike in NO2. Use a graph of predicted, actual, average for few set dates. Write about how a few days where the hour drastically underestimates the actual and how that is bad. Show how many days in sample of 30 the tool would predict stay inside in comparison to the monthly average. This is an school hourly 
+Breakdown. 

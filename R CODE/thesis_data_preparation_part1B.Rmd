@@ -171,17 +171,61 @@ df.temp.missing
 ```
 
 
-# 3a. Rename imputed variables to main variable names
+# 3a. Rename imputed node site variables to main variable names
 ```{r}
 # To this point we ahve imputed the values for BP, RAIN, RHUM, TEMP, and SOLR from the nearby sites: Bexley Erith, Bexley Belvedere West, and Dagenham Rush Green. 
 names(df2)
-df3 = df2 %>% select(Site,NO,NO2,NOX,O3,PM10,PM2.5,SO2,BP.IMP,RAIN.IMP,RHUM.IMP,SOLR.IMP,TEMP.IMP,WDIR,WSPD, TimeHoursNum,
-                     Date)
-colnames(df3) = c('Site','NO','NO2','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM',
-                  'SOLR','TEMP','WDIR','WSPD','TimeHoursNum','Date')
-dim(df3)
-str(df3)
-df3
+df3 = df2 %>% select(Site,Time, NO,NO2,NOX,O3,PM10,PM2.5,SO2,BP.IMP,RAIN.IMP,RHUM.IMP,SOLR.IMP,TEMP.IMP,WDIR,WSPD, TimeHoursNum,Date)
+colnames(df3) = c('Site','Time', 'NO','NO2','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD','TimeHoursNum','Date')
+```
+
+# 3b. Update the Time column so that the date time value is present
+note that the column has a slight problem in the raw data file -- date is provided in two different formats.
+```{r}
+require(reshape)
+require(tidyr)
+
+df3$Time1 = strptime(df3$Time, format = '%d/%m/%y %H:%M', 'GMT')
+df3$Time1 = strftime(df3$Time1, format = '%Y-%m-%d %H:%M')
+
+df3$Time2 = strptime(df3$Time, format = '%d/%m/%Y %H:%M', 'GMT')
+df3$Time2 = strftime(df3$Time2, format = '%Y-%m-%d %H:%M')
+
+df3$TimeAdj = ifelse(is.na(df3$Time1), df3$Time2, df3$Time1)
+
+df3 = df3 %>% select(Site, Date, TimeAdj, TimeHoursNum, NO:WSPD)
+colnames(df3) = c('Site','Date', 'TimeAdj', 'TimeHoursNum', 'NO','NO2','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD')
+df3 <- dplyr::rename(df3, Time = TimeAdj)
+
+```
+
+
+# 3c. View time-series plot in prep for predicted vs actual review
+```{r}
+
+f <- list(
+  family = "Courier New, monospace",
+  size = 12,
+  color = "#7f7f7f"
+)
+x <- list(
+  title = "Hour of Day",
+  size=8,
+  titlefont = f
+)
+y <- list(
+  title = "Average Hourly NO2",
+  titlefont = f
+)
+
+# reduce date range before running this plot:
+temp = df3 %>% filter(Date > '2016-01-01' & TimeHoursNum > 5 & TimeHoursNum < 17)
+temp
+p <- plot_ly(temp, x = ~Time, y=~NO2, name = 'NO2', type='scatter', mode='lines+markers') %>%      
+  layout(title = "Hourly NO2",
+         xaxis = list(title  = "Hour of Day (24 Hour Clock)"),
+         yaxis = list (title = "Hourly NO2 Concentration (µg/m3)"))
+p
 
 ```
 
@@ -197,10 +241,11 @@ df4$Week = as.numeric(format(df4$Date,'%W'))
 df4$Day <- as.factor(weekdays(df4$Date))
 df4$MMYYYY <- as.character(format(df4$Date, "%m/%Y"))
 
-df4 = df4 %>% select(Date, MMYYYY, Year, Month, Week, Day, TimeHoursNum,NO:WSPD)
+df4 = df4 %>% select(Date, Time, MMYYYY, Year, Month, Week, Day, TimeHoursNum,NO:WSPD)
 dim(df4) # 78912 x 21
 names(df4)
 head(df4)
+str(df4)
 ```
 
 # 4a - create a function where you specify number of lags needed and input variable and then loop through data frame to add the lags.  
@@ -219,26 +264,28 @@ lagColumnAdd = function(df, predictor, lagCount){
   return(dfNew)
 }
 
-df5 = lagColumnAdd(df4, 'NO',    24)  # creates lags 1 to 24
-df5 = lagColumnAdd(df5, 'NOX',   24)
-df5 = lagColumnAdd(df5, 'O3',    24)
-df5 = lagColumnAdd(df5, 'PM10',  24)
-df5 = lagColumnAdd(df5, 'PM2.5', 24)
-df5 = lagColumnAdd(df5, 'SO2',   24)
-df5 = lagColumnAdd(df5, 'BP',    24)
-df5 = lagColumnAdd(df5, 'RAIN',  24)
-df5 = lagColumnAdd(df5, 'RHUM',  24)
-df5 = lagColumnAdd(df5, 'SOLR',  24)
-df5 = lagColumnAdd(df5, 'TEMP',  24)
-df5 = lagColumnAdd(df5, 'WDIR',  24)
-df5 = lagColumnAdd(df5, 'WSPD',  24)
+df5 = lagColumnAdd(df4, 'NO',    5)  # creates lags 1 to 5
+df5 = lagColumnAdd(df5, 'NO2',   5)
+df5 = lagColumnAdd(df5, 'NOX',   5)
+df5 = lagColumnAdd(df5, 'O3',    5)
+df5 = lagColumnAdd(df5, 'PM10',  5)
+df5 = lagColumnAdd(df5, 'PM2.5', 5)
+df5 = lagColumnAdd(df5, 'SO2',   5)
+df5 = lagColumnAdd(df5, 'BP',    5)
+df5 = lagColumnAdd(df5, 'RAIN',  5)
+df5 = lagColumnAdd(df5, 'RHUM',  5)
+df5 = lagColumnAdd(df5, 'SOLR',  5)
+df5 = lagColumnAdd(df5, 'TEMP',  5)
+df5 = lagColumnAdd(df5, 'WDIR',  5)
+df5 = lagColumnAdd(df5, 'WSPD',  5)
 
 ```
 
-# 4b. use the lagged variable values to calculate the IMPUTED 'IMP' column values. 
+# 4b. use the lagged variable values to calculate the IMPUTED 'IMP' column values. I use lags 1-5 as they have the stronger correlations with the current hour. After 5 hours there doesn't appear to be a strong correlation.
 ```{r}
 # Use lag1 if available, else use lag 2, else lag 3..etc (to 5). See correlation effort in EDA. 
 df5 = mutate(df5, NO.IMP      = ifelse(is.na(NO),    ifelse(is.na(lag.1.NO),    ifelse(is.na(lag.2.NO),   ifelse(is.na(lag.3.NO), ifelse(is.na(lag.4.NO), lag.5.NO, lag.4.NO), lag.3.NO),    lag.2.NO) ,    lag.1.NO ),      NO         ))
+df5 = mutate(df5, NO2.IMP     = ifelse(is.na(NO2),   ifelse(is.na(lag.1.NO2),   ifelse(is.na(lag.2.NO2),  ifelse(is.na(lag.3.NO2), ifelse(is.na(lag.4.NO2), lag.5.NO2, lag.4.NO2), lag.3.NO2),    lag.2.NO2) ,    lag.1.NO2 ),      NO2 ))
 df5 = mutate(df5, NOX.IMP     = ifelse(is.na(NOX),   ifelse(is.na(lag.1.NOX),   ifelse(is.na(lag.2.NOX),  ifelse(is.na(lag.3.NOX), ifelse(is.na(lag.4.NOX), lag.5.NOX, lag.4.NOX), lag.3.NOX),    lag.2.NOX) ,    lag.1.NOX ),      NOX ))
 df5 = mutate(df5, O3.IMP      = ifelse(is.na(O3),    ifelse(is.na(lag.1.O3),    ifelse(is.na(lag.2.O3),   ifelse(is.na(lag.3.O3), ifelse(is.na(lag.4.O3), lag.5.O3, lag.4.O3), lag.3.O3),    lag.2.O3) ,    lag.1.O3 ),      O3      ))
 df5 = mutate(df5, PM10.IMP= ifelse(is.na(PM10),  ifelse(is.na(lag.1.PM10),  ifelse(is.na(lag.2.PM10), ifelse(is.na(lag.3.PM10), ifelse(is.na(lag.4.PM10), lag.5.PM10, lag.4.PM10), lag.3.PM10),    lag.2.PM10) ,  lag.1.PM10 ), PM10    ))
@@ -280,7 +327,7 @@ differenceColumnAdd = function(df, predictor, SinceTimeHoursNum){
   return(dfNew)
 }
 
-df6 = differenceColumnAdd(df5, 'NO2', '6')        # note that '6' here is the 6AM time of day. 
+df6 = differenceColumnAdd(df5, 'NO2.IMP', '6')        # note that '6' here is the 6AM time of day. 
 df6 = differenceColumnAdd(df6, 'NO.IMP', '6')
 df6 = differenceColumnAdd(df6, 'NOX.IMP', '6')
 df6 = differenceColumnAdd(df6, 'O3.IMP', '6')
@@ -295,7 +342,7 @@ df6 = differenceColumnAdd(df6, 'WDIR.IMP', '6')
 df6 = differenceColumnAdd(df6, 'WSPD.IMP', '6')
 
 # continue on using the function above for diff since 7am.
-df6 = differenceColumnAdd(df6, 'NO2',     '7')        # note that '7' here is the 7AM time of day. 
+df6 = differenceColumnAdd(df6, 'NO2.IMP',     '7')        # note that '7' here is the 7AM time of day. 
 df6 = differenceColumnAdd(df6, 'NO.IMP',  '7')
 df6 = differenceColumnAdd(df6, 'NOX.IMP', '7')
 df6 = differenceColumnAdd(df6, 'O3.IMP',  '7')
@@ -310,7 +357,7 @@ df6 = differenceColumnAdd(df6, 'WDIR.IMP','7')
 df6 = differenceColumnAdd(df6, 'WSPD.IMP','7')
 
 # continue on using the function above for diff since 8am.
-df6 = differenceColumnAdd(df6, 'NO2',      '8')        # note that '8' here is the 8AM time of day. 
+df6 = differenceColumnAdd(df6, 'NO2.IMP',      '8')        # note that '8' here is the 8AM time of day. 
 df6 = differenceColumnAdd(df6, 'NO.IMP',   '8')
 df6 = differenceColumnAdd(df6, 'NOX.IMP',  '8')
 df6 = differenceColumnAdd(df6, 'O3.IMP',   '8')
@@ -349,7 +396,7 @@ getDiffFromMaxConcentrationByDate = function(df, predictor){
   return(dfNew)
 }
 
-df7 = getDiffFromMaxConcentrationByDate(df6, 'NO2'     )        # calculate diff in hourly values from max value for each Date in df
+df7 = getDiffFromMaxConcentrationByDate(df6, 'NO2.IMP'     )        # calculate diff in hourly values from max value for each Date in df
 df7 = getDiffFromMaxConcentrationByDate(df7, 'NO.IMP'  )
 df7 = getDiffFromMaxConcentrationByDate(df7, 'NOX.IMP' )
 df7 = getDiffFromMaxConcentrationByDate(df7, 'O3.IMP'  )
@@ -371,7 +418,7 @@ names(df7)
 
 # 4e. for each date we need to calculate the slope between 5-8am 
 ```{r}
-getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
+getSlopeFromXamToYamByDate = function(df, predictor, startTime, endTime){
   existColNames = colnames(df)
   dfSet5AMConcentrationByDate = df %>% filter(TimeHoursNum==startTime) %>% select_('Date', predictor) 
   dfSet8AMConcentrationByDate = df %>% filter(TimeHoursNum==endTime) %>% select_('Date', predictor)
@@ -380,7 +427,7 @@ getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
   tempColName2 = paste0('TimeHoursNum.',endTime,'.',predictor)                                   
   colnames(dfTemp) = c('Date',tempColName1, tempColName2)
   
-  tempColName3 = paste0('5amTo8amSlope.',predictor) 
+  tempColName3 = paste0(startTime,'amTo',endTime,'amSlope.',predictor) 
   slopeDivisor = endTime - startTime
   slopeColName = (dfTemp[,tempColName2] - dfTemp[,tempColName1])/slopeDivisor     # 8am concentration minus 5am concentration /3 (since 3 hours imbetween)
   dfTemp = cbind(dfTemp, slopeColName)
@@ -393,19 +440,38 @@ getSlopeFrom5To8amByDate = function(df, predictor, startTime, endTime){
   
 }
 
-df8 = getSlopeFrom5To8amByDate(df7, 'NO2'     , 5, 8)   # takes 5 am to 8am slope
-df8 = getSlopeFrom5To8amByDate(df8, 'NO.IMP'  , 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'NOX.IMP' , 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'O3.IMP'  , 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'PM10.IMP', 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'SO2.IMP' , 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'BP.IMP'  , 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'RAIN.IMP', 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'RHUM.IMP', 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'SOLR.IMP', 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'TEMP.IMP', 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'WDIR.IMP', 5, 8)
-df8 = getSlopeFrom5To8amByDate(df8, 'WSPD.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df7, 'NO2.IMP'     , 5, 8)   # takes 5 am to 8am slope
+df8 = getSlopeFromXamToYamByDate(df8, 'NO.IMP'  , 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'NOX.IMP' , 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'O3.IMP'  , 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'PM10.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'SO2.IMP' , 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'BP.IMP'  , 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'RAIN.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'RHUM.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'SOLR.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'TEMP.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'WDIR.IMP', 5, 8)
+df8 = getSlopeFromXamToYamByDate(df8, 'WSPD.IMP', 5, 8)
+
+
+df8 = getSlopeFromXamToYamByDate(df8, 'NO2.IMP'  , 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'NO.IMP'  , 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'NOX.IMP' , 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'O3.IMP'  , 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'PM10.IMP', 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'SO2.IMP' , 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'BP.IMP'  , 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'RAIN.IMP', 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'RHUM.IMP', 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'SOLR.IMP', 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'TEMP.IMP', 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'WDIR.IMP', 2, 5)
+df8 = getSlopeFromXamToYamByDate(df8, 'WSPD.IMP', 2, 5)
+
+
+
+
 names(df8)
 dim(df8)
 ```
@@ -413,7 +479,7 @@ dim(df8)
 
 # 4f - for each month we calculate the mean concentrations. then we calc the diff in the value from the mean. 
 ```{r}
-df9 = na.omit(df8)                                                                   # remove the NAs since only care about rows which have all observations. 
+df9 = na.omit(df)                                                                   # remove the NAs since only care about rows which have all observations. 
 dates.over.x.hours = df9 %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==24)   # remove any dates that have less than 24 hours of observations. 
 dates.over.x.hours = dates.over.x.hours[,1]                                          
 dates.over.x.hours                                                                   # 237 dates with 24 hours of observations
@@ -439,7 +505,7 @@ calculateMonthlyAverage = function(df, predictor) {
   return(dfNew)
 }
 
-df12 = calculateMonthlyAverage(df11, 'NO2')
+df12 = calculateMonthlyAverage(df11, 'NO2.IMP')
 df12 = calculateMonthlyAverage(df12, 'NO.IMP')
 df12 = calculateMonthlyAverage(df12, 'NOX.IMP')
 df12 = calculateMonthlyAverage(df12, 'O3.IMP')
@@ -472,7 +538,7 @@ getDiffFromMeanMonthlyConcentration = function(df, predictor){
   return(dfNew)
 }
 
-df13 = getDiffFromMeanMonthlyConcentration(df12, 'NO2'     ) # calculate diff in hourly values from max value for each Date in df
+df13 = getDiffFromMeanMonthlyConcentration(df12, 'NO2.IMP'     ) # calculate diff in hourly values from max value for each Date in df
 df13 = getDiffFromMeanMonthlyConcentration(df13, 'NO.IMP'  )
 df13 = getDiffFromMeanMonthlyConcentration(df13, 'NOX.IMP' )
 df13 = getDiffFromMeanMonthlyConcentration(df13, 'O3.IMP'  )
@@ -488,101 +554,61 @@ df13 = getDiffFromMeanMonthlyConcentration(df13, 'WSPD.IMP')
 
 names(df13)
 head(df13)
+
+df14 = df13 %>% filter(TimeHoursNum>=6 & TimeHoursNum<=16 & !(Day=='Saturday') & !(Day=='Sunday'))
+dim(df14)  # 1936 x 209
+
 ```
 
 
 
-
-# 4f - part 2. for each date we need the diff in hourly value in comparison to the monthly average. 
-q. do i use the actual month here or the prior 30 days of values..??? i would expect that the prior 30 days would be more meaningful. If i do this then i will lose a lot of values since there will be many NAs. Therefore, i need to ensure that i collect the previous 30 days of values and then ONLY calculate a value if a threshold of e.g. 20 of the 30 days if available. See part 2 of 4f for the calc of prior 30 days with min threshold of number of days that need data for the mean to be calculated. 
-
-
-
-#Step 2: remove the NO2's that have NAs since this is the response variable. 
-To this point 
-- we have used the 1-3 hour imputed values. 
-
-Next 
-- rename the imputed values to the 'actual' so that naming of columns is neater
-- remove the dates that have 'NA' NO2 values since no response values should not be included in the modeling.
-
-
-START HERE NEXT JUNE 17 !!!  --- add lagged vars 1-3 into the data frame below next. 
-
-
-#IGNORE FOR NOW...
+# 4h - for each month we calculate the mean concentrations by hour of day. 
 ```{r}
-names(df5)
-df5 = df5 %>% select(Date, Year, Month, Week,Day,TimeHoursNum,
-                     NO.IMP,NO2,NOX.IMP,O3.IMP,PM10.IMP,PM2.5.IMP,SO2.IMP,
-                     BP.IMP,RAIN.IMP,RHUM.IMP,SOLR.IMP,TEMP.IMP,WDIR.IMP,WSPD.IMP,
-                     # lag 1s-lag3s
-                     lag.1.NO:lag.3.WSPD)
-colnames(df5) = c('Date','Year','Month','Week','Day','TimeHoursNum',
-                  'NO','NO2','NOX','O3','PM10','PM2.5','SO2',
-                  'BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD')
-df5
+calculateMonthlyHourlyAverage = function(df, predictor) {
+  existColNames = colnames(df)
+  meanHourlyConcentrationByMonthHourDf = df %>% select_('MMYYYY', 'TimeHoursNum', predictor)  %>% group_by_('MMYYYY','TimeHoursNum') %>% summarise_each(funs(mean))
+  meanHourlyConcentrationByMonthHourDfColName = paste0('Mean.Hourly.Concentration.By.MMYYYY.',predictor)                                                    
+  colnames(meanHourlyConcentrationByMonthHourDf) = c('MMYYYY','TimeHoursNum',meanHourlyConcentrationByMonthHourDfColName)
+  
+  dfNew = inner_join(df, meanHourlyConcentrationByMonthHourDf, by = c("MMYYYY" = "MMYYYY", "TimeHoursNum" = "TimeHoursNum"))
+  return(dfNew)
+}
+
+# calculateMonthlyHourlyAverage(temp, 'b')
+
+df15 = calculateMonthlyHourlyAverage(df14, 'NO2.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'NO.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'NOX.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'O3.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'PM10.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'SO2.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'BP.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'RAIN.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'RHUM.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'SOLR.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'TEMP.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'WDIR.IMP')
+df15 = calculateMonthlyHourlyAverage(df15, 'WSPD.IMP')
+
+
 ```
 
-
-
-REMOVE NA NO2 obs. 
-# IGNORE FOR NOW. 
 ```{r}
-dim(df8)  # 78912    409
-df9 = df8[!is.na(df8$NO2), ]
-dim(df9)  # 71937    409
+# names(df15)
+df15 = df15 %>% select(Date, Time, MMYYYY:TimeHoursNum,                  # date Time variables
+                    NO:WSPD,                                          # current hour response (actual) variables (include imputed values from other stations)
+                    lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                    NO.IMP:WSPD.IMP,                                  # current hour imputed variables
+                    Mean.Monthly.NO2.IMP:Mean.Monthly.WSPD.IMP,       # mean monthly concentration levels
+                    Mean.Hourly.Concentration.By.MMYYYY.NO2.IMP: Mean.Hourly.Concentration.By.MMYYYY.WSPD.IMP,   # mean hourly concentration levels (by month)
+                    `5amTo8amSlope.NO2.IMP`:`2amTo5amSlope.WSPD.IMP`) 
 
-dim(df8)
-df9 = na.omit(df8)
-dim(df9)
-table(df9$Year,df9$Month)
 
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
+write.csv(df15, file.path(outfilePath,'greenwich_eltham_imputed_school_hours_take2.csv'))
 ```
 
 
-ONLY INCLUDE DAYS THAT HAVE ALL OF THE 24 HOURS - MUST ADD THE LAGGED VARIABLES FIRST!!!!!!!!
-```{r}
-dates.over.x.hours = df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==24)
-dates.over.x.hours = dates.over.x.hours[,1]
-
-df = inner_join(df,dates.over.x.hours,by = c("Date" = "Date"))
-dim(df)  # 46464 x 20 (for 24 hour days)
-
-# quick check that what I just did worked
-df %>% group_by(Date) %>% summarise(n=n()) %>% filter(n<24) ## 0 rows returned = GOOD!!
-
-table(df$Year, df$Month)
-table(df$Year, df$Week)
-length(unique(df$Date)) # 1936 dates (when 24 hour days included ONLY)
-
-
-# All vars
-countMissing = sapply(df, function(x) sum(is.na(x)))
-percentMissing = round(apply(df, 2,function(col)sum(is.na(col))/length(col)),2)
-df.temp.missing = data.frame(countMissing, percentMissing)
-df.temp.missing = df.temp.missing[order(-percentMissing),]  # with ordering on desc percentMissing
-df.temp.missing
-
-
-##### TAKE 1 - ALL VARIABLES
-#calc number obs after removing all other NAs
-df6 = df
-dim(df6)
-df6 = na.omit(df6)
-dim(df6)   #7332  344
-
-# ##### TAKE 2 --- ALL VARIABLES without RHUM
-# # let's redo the above without RHUM since this has the highest number of missing variables
-# df6 = df %>% select(-RHUM, -BP)
-# names(df6)
-# dim(df6)
-# df6 = na.omit(df6)
-# dim(df6)   #10276    20   -> 17505    19 with RHUM removed. --> 23107 with RHUM and BP removed. not ideal as these are the QUITE EXPLANATORY vars ac to the theory books
-
-table(df6$Year, df6$Month)
-
-```
 
 <!-- Figure out which variables it makes sense to take the lagged t-1, t-2, and t-3 values. For correlations we need to remove the NA values first. This is slightly misleading since the NA values between two dates that are far apart may be problematic. May need to revert back to this, but we are trying here to get a sense of the correlation so i continue with the na.omit method for now. Alt: use count hourly obs that have the longest possible count of consec hours. -->
 
@@ -600,104 +626,4 @@ table(df6$Year, df6$Month)
 <!-- TEMP.cor  = cor(df5 %>% select(TEMP,lag.1.TEMP,lag.2.TEMP,lag.3.TEMP, lag.4.TEMP, lag.5.TEMP))[1,] -->
 <!-- WDIR.cor  = cor(df5 %>% select(WDIR,lag.1.WDIR,lag.2.WDIR,lag.3.WDIR, lag.4.WDIR, lag.5.WDIR))[1,] -->
 <!-- WSPD.cor  = cor(df5 %>% select(WSPD,lag.1.WSPD,lag.2.WSPD,lag.3.WSPD, lag.4.WSPD, lag.5.WSPD))[1,] -->
-
-```{r}
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
-write.csv(df6, file.path(outfilePath,'greenwich_eltham_na_omit_w_na_lag1_lag2_lag3_imputed_hourly_B.csv'))
-```
-
-
-
-
-
-## THIS WAS THE part2.Rmd file work below. 
-
-### Data Quality Check
-The air quality data set consists of 11392 hourly observations across 13 variables. The data set consists of six different pollutants (NO, NO2, NOX, O3, P2.5, and PM10) and five different meterological variables (BP, SOLR, TMP, WDIR, and WSPD), and Time. The node is based in Greenwich Eltham, London. The original data set consisted of five years, but I have only included observations where a value for each pollutant and meterological variable exists. The observations are taken of hourly (15 min averages) observations.  
-
-
-<!-- # Narrow down the data set to be school hours and week days only -->
-<!-- # STEP 2: REDUCE THE DATA SET WEEK DAYS: MON-FRI and SCHOOL HOURS: between 9AM - 4PM. -->
-
-```{r}
-df = df6 %>% filter(Day!='Saturday' & Day!='Sunday' & (TimeHoursNum>=6 & TimeHoursNum<=16) )
-table(df$Year, df$Month)
-dim(df)  # 2210  344
-```
-
-
-** NOT SO SURE WE NEED TO DO THIS BIT ** 
-# Part 2: reduce year 2009 to those weeks with 5 full days - repeat for 2010 then combine the two data frames 
-```{r}
-# create copy
-#df = df.fullday
-
-table(df$Year, df$Month)
-
-# # 2009 first
-# df.2009 = df %>% filter(Year==2009)
-# df.2009.tmp = df %>% filter(Year==2009) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
-# df.2009.tmp = df.2009.tmp[,1]
-# df.2009.fullweek = inner_join(df.2009,df.2009.tmp,by = c("Week" = "Week"))
-# dim(df.2009.fullweek)  # 280 53
-
-# 2010 second
-df.2010 = df %>% filter(Year==2010)
-df.2010.tmp = df %>% filter(Year==2010) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
-df.2010.tmp = df.2010.tmp[,1]
-df.2010.fullweek = inner_join(df.2010,df.2010.tmp,by = c("Week" = "Week"))
-dim(df.2010.fullweek)  # 200 53  -> 110 62
-
-# 2011
-df.2011 = df %>% filter(Year==2011)
-df.2011.tmp = df %>% filter(Year==2011) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
-df.2011.tmp = df.2011.tmp[,1]
-df.2011.fullweek = inner_join(df.2011,df.2011.tmp,by = c("Week" = "Week"))
-dim(df.2011.fullweek)  # 200 53  -> 0 62
-
-# 2012
-df.2012 = df %>% filter(Year==2012)
-df.2012.tmp = df %>% filter(Year==2012) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
-df.2012.tmp = df.2012.tmp[,1]
-df.2012.fullweek = inner_join(df.2012,df.2012.tmp,by = c("Week" = "Week"))
-dim(df.2012.fullweek)  #1155  62
-
-# 2013
-df.2013 = df %>% filter(Year==2013)
-df.2013.tmp = df %>% filter(Year==2013) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
-df.2013.tmp = df.2013.tmp[,1]
-df.2013.fullweek = inner_join(df.2013,df.2013.tmp,by = c("Week" = "Week"))
-dim(df.2013.fullweek)  # 1155  62
-
-# 2014
-df.2014 = df %>% filter(Year==2014)
-df.2014.tmp = df %>% filter(Year==2014) %>% group_by(Week) %>% summarise(Days=length(unique(Day))) %>% filter(Days==5) ## 0 rows returned = GOOD!!
-df.2014.tmp = df.2014.tmp[,1]
-df.2014.fullweek = inner_join(df.2014,df.2014.tmp,by = c("Week" = "Week"))
-dim(df.2014.fullweek)  #440  62
-
-
-
-df.fullweek.fullday = rbind(df.2010.fullweek,df.2011.fullweek,df.2012.fullweek,
-                            df.2013.fullweek,df.2014.fullweek)
-dim(df.fullweek.fullday) # 480 53 -> 2860 62
-length(unique(df.fullweek.fullday$Date)) # 90 days -> 260 dates
-dim(df.fullweek.fullday) # 2860   62
-
-table(df.fullweek.fullday$Year, df.fullweek.fullday$Month)
-dim(df.fullweek.fullday) # 2860   62
-
-
-```
-
-
-
-# STEP 6: EXPORT CSV
-```{r}
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
-#write.csv(df.fullweek.fullday, file.path(outfilePath,'greenwich_eltham_school_hours.csv'))
-write.csv(df.fullweek.fullday, file.path(outfilePath,'greenwich_eltham_imputed_school_hours.csv'))
-```
-
-
 

@@ -1,0 +1,373 @@
+---
+title: "neural network model"
+author: "Steven Futter"
+date: "5/30/2017"
+output: html_document
+---
+
+# MODEL 3: ANN using H2O - multinomial classification
+http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/index.html
+Useful tutorial: https://github.com/h2oai/h2o-tutorials/tree/master/tutorials/deeplearning
+
+
+ONLY NEED THIS ON FIRST RUN THROUGH
+```{r}
+# The following two commands remove any previously installed H2O packages for R.
+if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) }
+if ("h2o" %in% rownames(installed.packages())) { remove.packages("h2o") }
+
+# Next, we download packages that H2O depends on.
+if (! ("methods" %in% rownames(installed.packages()))) { install.packages("methods") }
+if (! ("statmod" %in% rownames(installed.packages()))) { install.packages("statmod") }
+if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") }
+if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") }
+if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") }
+if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") }
+if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") }
+if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") }
+
+# Now we download, install and initialize the H2O package for R.
+install.packages("h2o", type="source", repos=(c("http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/R")))
+library(h2o)
+localH2O = h2o.init(nthreads=-1)
+```
+
+################################################################################################################################################
+#### PART 1 - Predict NO2 using current and lagged variables, mean month imputed variables, and slope variables for the early morning ##########
+#### PART 2 - (see "thesis_data_model_nn_one_hour_ahead_take2.Rmd" file"
+####          Predict NO2 using lagged variables, mean month imputed variables, and slope variables for the early morning             ##########
+################################################################################################################################################
+
+################################################################################################################################
+#### PART 2
+#### Predict NO2 using lagged variables, mean month imputed variables, and slope variables for the early morning      ##########
+################################################################################################################################
+
+
+# step 1 - loop through all predictor variables to calculate the 9AM predicted value using t-1 to t-5 lags.
+#          Problem: we have a row for 9am but we need to have a column instead
+
+
+# The code below calculates the 1-hour ahead predictions 
+# --> I loop through all predictor variables and calculate the 1-hour ahead prediction which is valid for ALL 9AM observations for the training, testing, and validation sets
+
+```{r}
+library(dplyr)
+library(lubridate)
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
+
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR')
+
+
+# lets start with NO2
+for ( i in 2:2){  
+#for ( i in 1:length(response)){
+
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+
+createDataFrame = function(df,predictor){
+  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
+                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
+  dfPred = df[,predictor]
+  dfNew = cbind(dfPred, dfNew)
+  colnames(dfNew)[1] = paste0(predictor)
+  return(dfNew)
+}
+
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrame(df, responseCol)
+
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train = df[train,]
+df.test  = df[-train,]
+df.vali = validationDf
+
+
+# Train ANN then calculate train / test MSE
+########################################################################
+# MODEL 1: ANN that uses half as many hidden nodes as variable inputs. 
+########################################################################
+#library(h2o) # ONLY NEED ON FIRST RUN THROUGH
+#h2o.init()   # ONLY NEED ON FIRST RUN THROUGH
+df.train.hex <- as.h2o(df.train)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
+colcount    = dim(df.train.hex)[2]
+hiddencount = round(dim(df.train.hex)[2]/2)  # need to run the neural network with half as many hidden nodes as input nodes
+df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, hidden=c(hiddencount), variable_importances = TRUE)
+# summary(df.train.dl)
+
+# make a prediction here for train, test, validation set response
+predictions.train <- h2o.predict(df.train.dl, df.train.hex)
+predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
+predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
+
+# Export the data prediction for the testing and validation data sets
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+filenameTrain = paste0('greenwich_eltham_',response[i],'_ann_train_1_hr_ahead.csv')   # TWO HOURS AHEAD, THREE HOURS, ETC... WILL BE THE NAMES OF THE NEW FILES
+filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_1_hr_ahead.csv')
+filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_1_hr_ahead.csv')
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTrain = as.data.frame(h2o.cbind(predictions.train,df.train.hex))
+dfExportTrain = dfExportTrain %>% filter(TimeHoursNum == '9')
+dfExportTrain$TimeKey = as.POSIXct(dfExportTrain$Time) + hours(1)
+keepIdx = which(names(dfExportTrain) %in% c("predict","Time","TimeKey"))
+dfExportTrain = dfExportTrain[,keepIdx]
+write.csv(dfExportTrain, file.path(outfilePath,filenameTrain))   # to here: we have exported a training file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+dfExportTest = dfExportTest %>% filter(TimeHoursNum == '9')
+dfExportTest$TimeKey = as.POSIXct(dfExportTest$Time) + hours(1)
+keepIdx = which(names(dfExportTest) %in% c("predict","Time","TimeKey"))
+dfExportTest = dfExportTest[,keepIdx]
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex))
+dfExportVali = dfExportVali %>% filter(TimeHoursNum == '9')
+dfExportVali$TimeKey = as.POSIXct(dfExportVali$Time) + hours(1)
+keepIdx = which(names(dfExportVali) %in% c("predict","Time","TimeKey"))
+dfExportVali = dfExportVali[,keepIdx]
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+}
+```
+
+# At end of the data export we have also added aTimeKey that is meant to be used to JOIN the 9AM predictions into a NEW TESTING and NEW VALIDATION file. 
+# For now let's start with how is needed to update the testing file with the 9AM predictions. 
+
+```{r}
+# # check to see the MAE for each
+# # TRAINING: evaluate the quality of prediction here
+# df.train.mae = mean(abs(predictions.train-df.train.hex$NO2))
+# df.train.mae         # 3.19 no2 9am
+# 
+# # TESTING: evaluate the quality of the prediction using the test data set:
+# df.test.mae = mean(abs(predictions.test-df.test.hex$NO2))
+# df.test.mae          # 2.136125 NO2
+# 
+# df.vali.mae = mean(abs(predictions.vali-df.vali.hex$NO2))
+# df.vali.mae          # 4.970878 NO2
+
+# dfExportTest                      = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+# dfExportTest_responseHour         = dfExportTest %>% filter(TimeHoursNum == '9')
+# keepIdx                           = which(names(dfExportTest) %in% c("predict","Time","TimeKey"))
+# dfExportTest_Final                = dfExportTest_responseHour[,keepIdx]
+# write.csv(dfExportTest_Final, file.path(outfilePath,filenameTest))
+# dfExportTest_Final 
+
+
+# 1 loop through all vars for ALL hours and filter out the 9AM responses. 
+# 2 do NOT loop through, but manually call upon all inputs from the newly created test data sets
+# 
+
+df.test.2 = df.test
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_NO2_ann_test_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+inFile  # this is the file that holds all the 9AM predictions - TimeKey here is +1 hour as i need to insert t-1 (9AM) into 10AM!
+
+df.test.2$Time = as.POSIXct(df.test.2$Time)
+inFile$TimeKey = as.POSIXct(inFile$TimeKey)
+dfNew = full_join(df.test.2,inFile,by = c("Time" = "TimeKey")) 
+dfNew %>% select(Time, predict,NO2)
+dfNew$lag.1.NO2.new = ifelse(is.na(dfNew$predict),dfNew$lag.1.NO2,dfNew$predict)
+dfNew %>% select(Time,predict,lag.1.NO2, lag.1.NO2.new)
+dfNew = dfNew %>% select(everything(), -predict)
+#names(dfNew)
+
+# to this point we have added lag.1.NO2.new to the test data frame. this is great. However, now we need to repeat the process but for the other lag.1.variables. Let's repeat the process with the NO variable next. 
+# response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR')
+
+# note - doesn't matter that NO2 is the far left column here since i'm trying to insert the t-1 lag at this point. nothing more. 
+df.test.2 = df.test
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_NO_ann_test_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+inFile  # this is the file that holds all the 9AM predictions - TimeKey here is +1 hour as i need to insert t-1 (9AM) into 10AM!
+
+df.test.2$Time = as.POSIXct(df.test.2$Time)
+inFile$TimeKey = as.POSIXct(inFile$TimeKey)
+dfNew = full_join(df.test.2,inFile,by = c("Time" = "TimeKey")) 
+names(dfNew)
+dfNew %>% select(Time, predict,NO)
+dfNew$lag.1.NO.new = ifelse(is.na(dfNew$predict),dfNew$lag.1.NO,dfNew$predict)
+dfNew %>% select(Time,predict,lag.1.NO, lag.1.NO.new)
+dfNew = dfNew %>% select(everything(), -predict)
+names(dfNew)
+
+
+# repeat again for NOX
+df.test.2 = df.test
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_NOX_ann_test_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+inFile  # this is the file that holds all the 9AM predictions - TimeKey here is +1 hour as i need to insert t-1 (9AM) into 10AM!
+
+
+#df.test.2$Time = as.POSIXct(df.test.2$Time)  # dont need to keep repeating this step!!!
+inFile$TimeKey = as.POSIXct(inFile$TimeKey)  
+dfNew = full_join(df.test.2,inFile,by = c("Time" = "TimeKey")) 
+names(dfNew)
+dfNew %>% select(Time, predict)
+dfNew$lag.1.NOX.new = ifelse(is.na(dfNew$predict),dfNew$lag.1.NOX,dfNew$predict)
+dfNew %>% select(Time,predict,lag.1.NOX, lag.1.NOX.new)
+dfNew = dfNew %>% select(everything(), -predict)
+names(dfNew)
+
+# next need to figure out a way to insert a new column at the end of the df.test.2 data.frame so that we dont have to start 
+# again each time!
+df.test.2 # keep as is from above... 
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_O3_ann_test_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+inFile  # this is the file that holds all the 9AM predictions - TimeKey here is +1 hour as i need to insert t-1 (9AM) into 10AM!
+inFile$TimeKey = as.POSIXct(inFile$TimeKey)  
+df.test.2 = full_join(df.test.2,inFile,by = c("Time" = "TimeKey")) 
+df.test.2 %>% select(Time, predict)
+df.test.2$lag.1.O3.new = ifelse(is.na(df.test.2$predict),df.test.2$lag.1.O3,df.test.2$predict)
+df.test.2 %>% select(Time,predict,lag.1.O3, lag.1.O3.new)
+df.test.2 = df.test.2 %>% select(everything(), -predict)
+names(df.test.2)
+
+# try again but on next var
+df.test.2 # keep as is from above... 
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_PM10_ann_test_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+inFile  # this is the file that holds all the 9AM predictions - TimeKey here is +1 hour as i need to insert t-1 (9AM) into 10AM!
+inFile$TimeKey = as.POSIXct(inFile$TimeKey)  
+df.test.2 = full_join(df.test.2,inFile,by = c("Time" = "TimeKey")) 
+df.test.2 %>% select(Time, predict)
+df.test.2$lag.1.PM10.new = ifelse(is.na(df.test.2$predict),df.test.2$lag.1.PM10,df.test.2$predict)
+#df.test.2 %>% select(Time,predict,lag.1.PM10, lag.1.PM10.new)  # check visually to see how different one value is to the next
+df.test.2 = df.test.2 %>% select(everything(), -predict)
+names(df.test.2)
+
+
+
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_PM2.5_ann_test_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+inFile  # this is the file that holds all the 9AM predictions - TimeKey here is +1 hour as i need to insert t-1 (9AM) into 10AM!
+inFile$TimeKey = as.POSIXct(inFile$TimeKey)  
+df.test.2 = full_join(df.test.2,inFile,by = c("Time" = "TimeKey")) 
+#df.test.2 %>% select(Time, predict)
+df.test.2$lag.1.PM2.5.new = ifelse(is.na(df.test.2$predict),df.test.2$lag.1.PM2.5,df.test.2$predict)
+#df.test.2 %>% select(Time,predict,lag.1.PM10, lag.1.PM10.new)  # check visually to see how different one value is to the next
+df.test.2 = df.test.2 %>% select(everything(), -predict)
+names(df.test.2)
+
+# create a function that will loop through all the test data frame to insert the 10 t-1 lags
+updateDF_tMinus1Lags = function(df, lagPredictorOld, lagPredictorNew, infile){
+  inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
+  inFile = inFile %>% select(predict, TimeKey)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
+  inFile$TimeKey = as.POSIXct(inFile$TimeKey)  
+  df = full_join(df,inFile,by = c("Time" = "TimeKey")) 
+  df$lagPredictorNew = ifelse(is.na(df$predict),df[,lagPredictorOld],df$predict)
+  dfNew = df %>% select(everything(), -predict)
+  colnames(dfNew)[length(names(dfNew))] = lagPredictorNew
+  return(dfNew)
+}
+
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR')
+
+
+# Next: update each of these function call outs for the old and the new variable names and input files... 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.NO2", "lag.1.NO2.new", "greenwich_eltham_NO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.NO",  "lag.1.NO.new",  "greenwich_eltham_NO_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+df.test.2 = updateDF_tMinus1Lags(df.test.2, "lag.1.SO2", "lag.1.SO2.new", "greenwich_eltham_SO2_ann_test_1_hr_ahead.csv") 
+
+# to this point i have created a new 'test' data frame that includes ALL t-1 lagged variables in preparation for the 10AM model. 
+# to produce a 10AM test prediction I need to 
+
+names(df.test.2)
+
+
+
+
+###### NEST CREAT 11AM PREIDCTIONS ####
+
+
+
+
+
+
+
+
+## GOAL below.. run predictions.test and predictions.vali where df.test.hex Is the REVISED DATA FRAME WITH ALL THE IMPUTED lagged values. 
+# to this point i have updated the 9AM NO2 predicted value as the new NO2 lagged value with .new at the end. 
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
+predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
+
+
+
+
+```
+
+
+# The code below calculates the 1-hour ahead predictions 
+# (done) I loop through all predictor variables and calculate the 1-hour ahead prediction which is valid for ALL 9AM observations for the training, testing, and validtn.
+# --> i calculate the 2-hour ahead output which is really the 1-hour ahead prediction using imputed 9am and t-2 to t-5 lags. 
+
+```{r}
+# next we need to add the 9AM predictions for each of the pollutant and non-pollutant values into the 10AM t-1 column. 
+# these are the three 'running' training, test, and validation data sets. 
+# lets start with the training data set. 
+df = df.train
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+inFile = read.csv(file.path(inPath,"greenwich_eltham_WDIR_ann_train_1_hr_ahead.csv"),na.strings=c("NA"," "))
+inFile = inFile %>% select(predict, Time)
+dfNew$Time[1]
+dfNew = full_join(df,inFile,by = c("Time" = "Time")) 
+dfNew %>% select(Time,predict,WDIR)
+dfNew$WDIRNew = ifelse(is.na(dfNew$predict),dfNew$lag.1.WDIR,dfNew$predict)
+dfNew %>% select(Time,predict,lag.1.WDIR, WDIRNew)
+
+library(lubridate)
+dfNew$Time[1] + hours(1)
+str(dfNew)
+as.POSIXct(dfNew$Time[1]) + hours(1)
+
+
+```
+
+
+
