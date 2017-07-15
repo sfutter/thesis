@@ -1,0 +1,226 @@
+```{r}
+# The following two commands remove any previously installed H2O packages for R.
+if ("package:h2o" %in% search()) { detach("package:h2o", unload=TRUE) }
+if ("h2o" %in% rownames(installed.packages())) { remove.packages("h2o") }
+
+# Next, we download packages that H2O depends on.
+if (! ("methods" %in% rownames(installed.packages()))) { install.packages("methods") }
+if (! ("statmod" %in% rownames(installed.packages()))) { install.packages("statmod") }
+if (! ("stats" %in% rownames(installed.packages()))) { install.packages("stats") }
+if (! ("graphics" %in% rownames(installed.packages()))) { install.packages("graphics") }
+if (! ("RCurl" %in% rownames(installed.packages()))) { install.packages("RCurl") }
+if (! ("jsonlite" %in% rownames(installed.packages()))) { install.packages("jsonlite") }
+if (! ("tools" %in% rownames(installed.packages()))) { install.packages("tools") }
+if (! ("utils" %in% rownames(installed.packages()))) { install.packages("utils") }
+
+# Now we download, install and initialize the H2O package for R.
+install.packages("h2o", type="source", repos=(c("http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/R")))
+library(h2o)
+localH2O = h2o.init(nthreads=-1)
+```
+
+9AM prediction 
+
+```{r}
+library(dplyr)
+library(lubridate)
+codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
+
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') 
+
+for (i in 1:1){
+#for ( i in 1:length(response)){
+  
+modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+  
+createDataFrame = function(df,predictor){
+  dfNew = df %>% select(Year, Month, TimeHoursNum,                  # date Time variables
+                        lag.1.NO:lag.3.NO,
+                        lag.1.NO2:lag.3.NO2,
+                        lag.1.NOX:lag.3.NOX,
+                        lag.1.O3:lag.3.O3,
+                        lag.1.PM10:lag.3.PM10,
+                        lag.1.PM2.5:lag.3.PM2.5,
+                        lag.1.SO2:lag.3.SO2,
+                        
+                        lag.1.BP:lag.3.BP,
+                        lag.1.RAIN:lag.3.RAIN,
+                        lag.1.RHUM:lag.3.RHUM,
+                        lag.1.SOLR:lag.3.SOLR,
+                        lag.1.TEMP:lag.3.TEMP,
+                        lag.1.WDIR:lag.3.WDIR,
+                        lag.1.WSPD:lag.3.WSPD,
+                        
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
+                        
+                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
+  dfPred = df[,predictor]
+  dfNew = cbind(dfPred, dfNew)
+  colnames(dfNew)[1] = paste0(predictor)
+  return(dfNew)
+}
+
+#   [1] "NO2"                     "Time"                    "Year"                    "Month"                   "TimeHoursNum"            "lag.1.NO"               
+#   [7] "lag.2.NO"                "lag.3.NO"                "lag.4.NO"                "lag.5.NO"                "lag.1.NO2"               "lag.2.NO2"              
+#  [13] "lag.3.NO2"               "lag.4.NO2"               "lag.5.NO2"               "lag.1.NOX"               "lag.2.NOX"               "lag.3.NOX"              
+#  [19] "lag.4.NOX"               "lag.5.NOX"               "lag.1.O3"                "lag.2.O3"                "lag.3.O3"                "lag.4.O3"               
+#  [25] "lag.5.O3"                "lag.1.PM10"              "lag.2.PM10"              "lag.3.PM10"              "lag.4.PM10"              "lag.5.PM10"             
+#  [31] "lag.1.PM2.5"             "lag.2.PM2.5"             "lag.3.PM2.5"             "lag.4.PM2.5"             "lag.5.PM2.5"             "lag.1.SO2"              
+#  [37] "lag.2.SO2"               "lag.3.SO2"               "lag.4.SO2"               "lag.5.SO2"               "lag.1.BP"                "lag.2.BP"               
+#  [43] "lag.3.BP"                "lag.4.BP"                "lag.5.BP"                "lag.1.RAIN"              "lag.2.RAIN"              "lag.3.RAIN"             
+#  [49] "lag.4.RAIN"              "lag.5.RAIN"              "lag.1.RHUM"              "lag.2.RHUM"              "lag.3.RHUM"              "lag.4.RHUM"             
+#  [55] "lag.5.RHUM"              "lag.1.SOLR"              "lag.2.SOLR"              "lag.3.SOLR"              "lag.4.SOLR"              "lag.5.SOLR"             
+#  [61] "lag.1.TEMP"              "lag.2.TEMP"              "lag.3.TEMP"              "lag.4.TEMP"              "lag.5.TEMP"              "lag.1.WDIR"             
+#  [67] "lag.2.WDIR"              "lag.3.WDIR"              "lag.4.WDIR"              "lag.5.WDIR"              "lag.1.WSPD"              "lag.2.WSPD"             
+#  [73] "lag.3.WSPD"              "lag.4.WSPD"              "lag.5.WSPD"              "BP.IMP"                  "RAIN.IMP"                "RHUM.IMP"               
+#  [79] "SOLR.IMP"                "TEMP.IMP"                "WDIR.IMP"                "WSPD.IMP"                "X5amTo8amSlope.NO2.IMP"  "X5amTo8amSlope.NO.IMP"  
+#  [85] "X5amTo8amSlope.NOX.IMP"  "X5amTo8amSlope.O3.IMP"   "X5amTo8amSlope.PM10.IMP" "X5amTo8amSlope.SO2.IMP"  "X5amTo8amSlope.BP.IMP"   "X5amTo8amSlope.RAIN.IMP"
+#  [91] "X5amTo8amSlope.RHUM.IMP" "X5amTo8amSlope.SOLR.IMP" "X5amTo8amSlope.TEMP.IMP" "X5amTo8amSlope.WDIR.IMP" "X5amTo8amSlope.WSPD.IMP" "X2amTo5amSlope.NO2.IMP" 
+#  [97] "X2amTo5amSlope.NO.IMP"   "X2amTo5amSlope.NOX.IMP"  "X2amTo5amSlope.O3.IMP"   "X2amTo5amSlope.PM10.IMP" "X2amTo5amSlope.SO2.IMP"  "X2amTo5amSlope.BP.IMP"  
+# [103] "X2amTo5amSlope.RAIN.IMP" "X2amTo5amSlope.RHUM.IMP" "X2amTo5amSlope.SOLR.IMP" "X2amTo5amSlope.TEMP.IMP" "X2amTo5amSlope.WDIR.IMP" "X2amTo5amSlope.WSPD.IMP"
+
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrame(df, responseCol)
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+
+df.train = df.train.temp %>% select(-Year)
+df.test  = df.test.temp  %>% select(-Year)
+df.vali  = df.vali.temp  %>% select(-Year)
+
+
+# Train ANN then calculate train / test MSE
+########################################################################
+# MODEL 1: ANN that uses half as many hidden nodes as variable inputs. 
+########################################################################
+#library(h2o) # ONLY NEED ON FIRST RUN THROUGH
+#h2o.init()   # ONLY NEED ON FIRST RUN THROUGH
+df.train.hex <- as.h2o(df.train)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
+colcount    = dim(df.train.hex)[2]
+hiddencount = round(dim(df.train.hex)[2]/2)  # need to run the neural network with half as many hidden nodes as input nodes
+modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
+
+df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
+                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10) 
+
+}
+summary(df.train.dl)
+# h2o.varimp(df.train.dl)
+
+# MSE:  16.56776
+# RMSE:  4.070352
+# MAE:  3.029371
+# RMSLE:  NaN
+# Mean Residual Deviance :  16.56776
+# 
+# 
+# H2ORegressionMetrics: deeplearning
+# ** Reported on validation data. **
+# ** Metrics reported on full validation frame **
+# 
+# MSE:  38.16525
+# RMSE:  6.177803
+# MAE:  4.193334
+# RMSLE:  NaN
+# Mean Residual Deviance :  38.16525
+
+
+#names(df)
+```
+
+
+
+
+
+# Save the model
+model_path <- h2o.saveModel(object=df.train.dl, path=modelPath, force=TRUE)
+# print(model_path)
+# /tmp/mymodel/DeepLearning_model_R_1441838096933
+
+# make a prediction here for train, test, validation set response
+predictions.train <- h2o.predict(df.train.dl, df.train.hex)
+predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
+predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
+
+# Export the data prediction for the testing and validation data sets
+outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+filenameTrain = paste0('greenwich_eltham_',response[i],'_ann_train_1_hr_ahead.csv')   # TWO HOURS AHEAD, THREE HOURS, ETC... WILL BE THE NAMES OF THE NEW FILES
+filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_1_hr_ahead.csv')
+filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_1_hr_ahead.csv')
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTrain = as.data.frame(h2o.cbind(predictions.train,df.train.hex))
+dfExportTrain = dfExportTrain %>% filter(TimeHoursNum == '9')
+dfExportTrain$TimeKey1 = as.POSIXct(dfExportTrain$Time) + hours(1)
+dfExportTrain$TimeKey2 = as.POSIXct(dfExportTrain$Time) + hours(2)
+dfExportTrain$TimeKey3 = as.POSIXct(dfExportTrain$Time) + hours(3)
+dfExportTrain$TimeKey4 = as.POSIXct(dfExportTrain$Time) + hours(4)
+dfExportTrain$TimeKey5 = as.POSIXct(dfExportTrain$Time) + hours(5)
+keepIdx = which(names(dfExportTrain) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportTrain = dfExportTrain[,keepIdx]
+write.csv(dfExportTrain, file.path(outfilePath,filenameTrain))   # to here: we have exported a training file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+dfExportTest = dfExportTest %>% filter(TimeHoursNum == '9')
+dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
+dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
+dfExportTest$TimeKey3 = as.POSIXct(dfExportTest$Time) + hours(3)
+dfExportTest$TimeKey4 = as.POSIXct(dfExportTest$Time) + hours(4)
+dfExportTest$TimeKey5 = as.POSIXct(dfExportTest$Time) + hours(5)
+keepIdx = which(names(dfExportTest) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportTest = dfExportTest[,keepIdx]
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex))
+dfExportVali = dfExportVali %>% filter(TimeHoursNum == '9')
+dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
+dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
+dfExportVali$TimeKey3 = as.POSIXct(dfExportVali$Time) + hours(3)
+dfExportVali$TimeKey4 = as.POSIXct(dfExportVali$Time) + hours(4)
+dfExportVali$TimeKey5 = as.POSIXct(dfExportVali$Time) + hours(5)
+keepIdx = which(names(dfExportVali) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportVali = dfExportVali[,keepIdx]
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# # CALC the MAE here
+dfExportTrain.MAE = mean(abs(dfExportTrain$predict - dfExportTrain$NO2))
+#dfExportTrain.MAE # 4.129 / 4.178   => 3.140417 / 3.615189 / 3.251841  = with  5 lags included.
+#dfExportTrain.MAE # 4.129 / 4.178   => 3.312458 / 3.056598 / 2.760583 / 3.119739  = with  3 lags included.
+dfExportTrain.MAE # 4.129 / 4.178   => 3.367783 / 3.575584 / 3.677053  = with  3 lags included.
+# names(df)
+
+} 
+
+summary(df.train.dl)
+h2o.varimp(df.train.dl)
+
+
+```
+
