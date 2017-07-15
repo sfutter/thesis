@@ -35,34 +35,35 @@ localH2O = h2o.init(nthreads=-1)
 # STEP 1: 1-HOUR AHEAD PREDICTIONS
 # TRAIN MODEL and CREATE TRAIN, TEST, VALIDATION PREDICTIONS then EXPORT OUTPUT for ALL VARIABLES -- useful for 9AM prediction made at 8AM. 
 
+# 9AM PREDICTION
+
 ```{r}
 library(dplyr)
 library(lubridate)
 codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
 source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+
+#for (i in 1:1){
+for ( i in 1:length(response)){
+  
 modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
 inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
-names(df)
-```
-
-
-```{r}
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-for (i in 14:14){
-#for ( i in 1:length(response)){
+  
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
   colnames(dfNew)[1] = paste0(predictor)
   return(dfNew)
 }
+
 
 responseCol = response[i]                 # set first column to the predicted response
 df = createDataFrame(df, responseCol)
@@ -156,6 +157,14 @@ keepIdx = which(names(dfExportVali) %in% c(response[i], "predict","Time","TimeKe
 dfExportVali = dfExportVali[,keepIdx]
 write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
 
+# # CALC the MAE here
+# # TESTING: evaluate the quality of the prediction using the test data set:
+# df.test.mae = mean(abs(df$predict-df$NO2))
+# df.test.mae          # 6.076698 NO2
+
+# dfExportTrain.MAE = mean(abs(dfExportTrain$predict - dfExportTrain$NO2))
+# dfExportTrain.MAE # 4.129 / 4.178
+
 }
 ```
 
@@ -176,12 +185,13 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we ha
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
 # This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
@@ -327,19 +337,20 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we ha
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
   colnames(dfNew)[1] = paste0(predictor)
   return(dfNew)
 }
+
 
 # FOR 11AM TIMEKEY1 IN THE 10AM PREDICT FILE IS 1-HOUR LAG. FOR 11AM TIMEKEY2 IN THE 9AM PREDICT FILE IS THE 2-HOUR LAG.
 # FUNCTION THAT REPLACES ACTUAL-LAG-1 WITH PREDICTED-LAG-1
@@ -511,13 +522,13 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
@@ -716,13 +727,13 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
@@ -941,13 +952,13 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
@@ -1189,13 +1200,13 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
@@ -1444,13 +1455,13 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 # Recreate the test/valid data frame
 createDataFrame = function(df,predictor){
   dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
                         lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
+                        BP.IMP:WSPD.IMP,                                  # use current hour meteorological variable inputs (assumed provided by MET office UK)
                         X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
   dfPred = df[,predictor]
   dfNew = cbind(dfPred, dfNew)
