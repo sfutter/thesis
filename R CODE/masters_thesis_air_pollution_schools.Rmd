@@ -44,7 +44,7 @@ codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
 source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
 # This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')     #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')    
 
 #for (i in 1:1){
 for ( i in 1:length(response)){
