@@ -35,37 +35,26 @@ localH2O = h2o.init(nthreads=-1)
 # STEP 1: 1-HOUR AHEAD PREDICTIONS
 # TRAIN MODEL and CREATE TRAIN, TEST, VALIDATION PREDICTIONS then EXPORT OUTPUT for ALL VARIABLES -- useful for 9AM prediction made at 8AM. 
 
+# 9AM PREDICTION
+
 ```{r}
 library(dplyr)
 library(lubridate)
 codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
 source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')     #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
+
+#for (i in 1:1){
+for ( i in 1:length(response)){
+  
 modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
 inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
-names(df)
-```
-
-
-```{r}
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-for (i in 14:14){
-#for ( i in 1:length(response)){
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
+  
 responseCol = response[i]                 # set first column to the predicted response
-df = createDataFrame(df, responseCol)
+df = createDataFrame(df, responseCol)     # lags 1-3, current hour meteo, slopes for prior 8am.
 
 # Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
 validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
@@ -81,9 +70,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# remove year now that validation set has been removed
+df.train.time = as.h2o(df.train.temp$Time)
+df.test.time  = as.h2o(df.test.temp$Time)
+df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year, -Time)
+df.test  = df.test.temp  %>% select(-Year, -Time)
+df.vali  = df.vali.temp  %>% select(-Year, -Time)
 
 
 # Train ANN then calculate train / test MSE
@@ -101,7 +99,7 @@ colcount    = dim(df.train.hex)[2]
 hiddencount = round(dim(df.train.hex)[2]/2)  # need to run the neural network with half as many hidden nodes as input nodes
 modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
 df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
-                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID)
+                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234) #, nfolds=10
 # summary(df.train.dl)
 
 # Save the model
@@ -121,7 +119,8 @@ filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_1_hr_ahead.csv
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_1_hr_ahead.csv')
 
 # EXPORT THE TEST DATA SET PREDICTIONS
-dfExportTrain = as.data.frame(h2o.cbind(predictions.train,df.train.hex))
+dfExportTrain = as.data.frame(h2o.cbind(df.train.time, predictions.train,df.train.hex))
+colnames(dfExportTrain)[1] = 'Time'
 dfExportTrain = dfExportTrain %>% filter(TimeHoursNum == '9')
 dfExportTrain$TimeKey1 = as.POSIXct(dfExportTrain$Time) + hours(1)
 dfExportTrain$TimeKey2 = as.POSIXct(dfExportTrain$Time) + hours(2)
@@ -133,7 +132,8 @@ dfExportTrain = dfExportTrain[,keepIdx]
 write.csv(dfExportTrain, file.path(outfilePath,filenameTrain))   # to here: we have exported a training file containing ALL the 9am predictions for ALL pollutant/meteo vars
 
 # EXPORT THE TEST DATA SET PREDICTIONS
-dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+dfExportTest = as.data.frame(h2o.cbind(df.test.time, predictions.test,df.test.hex))
+colnames(dfExportTest)[1] = 'Time'
 dfExportTest = dfExportTest %>% filter(TimeHoursNum == '9')
 dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
 dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
@@ -145,7 +145,8 @@ dfExportTest = dfExportTest[,keepIdx]
 write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
 
 # EXPORT THE VALIDATION DATA SET PREDICTIONS
-dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex))
+dfExportVali = as.data.frame(h2o.cbind(df.vali.time, predictions.vali,df.vali.hex))
+colnames(dfExportVali)[1] = 'Time'
 dfExportVali = dfExportVali %>% filter(TimeHoursNum == '9')
 dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
 dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
@@ -176,34 +177,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we ha
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
 # This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-# FUNCTION THAT REPLACES ACTUAL-LAG-1 WITH PREDICTED-LAG-x
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 
 ########################################
@@ -236,10 +210,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
 
+# # remove year now that validation set has been removed
+# df.train.time = as.h2o(df.train.temp$Time)
+# df.test.time  = as.h2o(df.test.temp$Time)
+# df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 # names(df.test)   # same as df.vali
@@ -289,7 +271,8 @@ filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_2_hr_ahead.csv
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_2_hr_ahead.csv')
 
 # EXPORT THE TEST DATA SET PREDICTIONS
-dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex))
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex)) #df.test.time, predictions.test,df.test.hex))
+#colnames(dfExportTest)[1] = 'Time'
 dfExportTest = dfExportTest %>% filter(TimeHoursNum == '10')
 dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
 dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
@@ -301,7 +284,8 @@ dfExportTest = dfExportTest[,keepIdx]
 write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
 
 # EXPORT THE VALIDATION DATA SET PREDICTIONS
-dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex))
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex)) #df.vali.time, predictions.vali,df.vali.hex))
+# colnames(dfExportVali)[1] = 'Time'
 dfExportVali = dfExportVali %>% filter(TimeHoursNum == '10')
 dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
 dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
@@ -327,53 +311,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we ha
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-# FOR 11AM TIMEKEY1 IN THE 10AM PREDICT FILE IS 1-HOUR LAG. FOR 11AM TIMEKEY2 IN THE 9AM PREDICT FILE IS THE 2-HOUR LAG.
-# FUNCTION THAT REPLACES ACTUAL-LAG-1 WITH PREDICTED-LAG-1
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-# FOR 11AM TIMEKEY1 IN THE 10AM PREDICT FILE IS 1-HOUR LAG. FOR 11AM TIMEKEY2 IN THE 9AM PREDICT FILE IS THE 2-HOUR LAG.
-# FUNCTION THAT REPLACES ACTUAL-LAG-1 & LAG-2 WITH PREDICTED-LAG-x
-updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey2)  # note that the TimeKey for the 11AM prdiction will be 9AM TIMEKEY2!
-  
-  inFile$TimeKey2 = as.POSIXct(inFile$TimeKey2)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey2")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 
 ########################################
@@ -406,9 +344,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# # remove year now that validation set has been removed
+# df.train.time = as.h2o(df.train.temp$Time)
+# df.test.time  = as.h2o(df.test.temp$Time)
+# df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 
@@ -511,68 +458,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-# FOR 12AM TIMEKEY1 IN THE 11AM PREDICT FILE IS 1-HOUR LAG. FOR 12AM TIMEKEY2 IN THE 10AM PREDICT FILE IS THE 2-HOUR LAG, TIMEKEY3 = 9AM prediction 3-HOUR lag
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey2)  
-  
-  inFile$TimeKey2 = as.POSIXct(inFile$TimeKey2)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey2")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-
-updateDF_tMinus3Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey3)  
-  
-  inFile$TimeKey3 = as.POSIXct(inFile$TimeKey3)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey3")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 
 ########################################
@@ -605,9 +491,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# # remove year now that validation set has been removed
+# df.train.time = as.h2o(df.train.temp$Time)
+# df.test.time  = as.h2o(df.test.temp$Time)
+# df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 
@@ -716,81 +611,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey2)  
-  
-  inFile$TimeKey2 = as.POSIXct(inFile$TimeKey2)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey2")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus3Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey3)  
-  
-  inFile$TimeKey3 = as.POSIXct(inFile$TimeKey3)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey3")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus4Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey4)  
-  
-  inFile$TimeKey4 = as.POSIXct(inFile$TimeKey4)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey4")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 ########################################
 # LOAD SAVED MODEL From Step 1 ABOVE #
@@ -822,9 +643,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# # remove year now that validation set has been removed
+# df.train.time = as.h2o(df.train.temp$Time)
+# df.test.time  = as.h2o(df.test.temp$Time)
+# df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 
@@ -941,94 +771,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey2)  
-  
-  inFile$TimeKey2 = as.POSIXct(inFile$TimeKey2)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey2")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus3Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey3)  
-  
-  inFile$TimeKey3 = as.POSIXct(inFile$TimeKey3)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey3")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus4Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey4)  
-  
-  inFile$TimeKey4 = as.POSIXct(inFile$TimeKey4)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey4")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus5Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey5)  
-  
-  inFile$TimeKey5 = as.POSIXct(inFile$TimeKey5)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey5")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 
 
@@ -1063,10 +806,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
 
+# remove year now that validation set has been removed
+df.train.time = as.h2o(df.train.temp$Time)
+df.test.time  = as.h2o(df.test.temp$Time)
+df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 # names(df.test)   # same as df.vali
@@ -1189,95 +940,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey2)  
-  
-  inFile$TimeKey2 = as.POSIXct(inFile$TimeKey2)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey2")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus3Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey3)  
-  
-  inFile$TimeKey3 = as.POSIXct(inFile$TimeKey3)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey3")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus4Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey4)  
-  
-  inFile$TimeKey4 = as.POSIXct(inFile$TimeKey4)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey4")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus5Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey5)  
-  
-  inFile$TimeKey5 = as.POSIXct(inFile$TimeKey5)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey5")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 
 
@@ -1311,9 +974,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# # remove year now that validation set has been removed
+# df.train.time = as.h2o(df.train.temp$Time)
+# df.test.time  = as.h2o(df.test.temp$Time)
+# df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 
@@ -1444,95 +1116,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 # A. RECREATE PRE-PROCESSED TEST RAW DATA PROVIDED -- for TEST and VALIDATION SAMPLES --- REPLACING ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 #    LAYOUT NEEDS TO BE EXACTLY THE SAME AS BEFORE.
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2', 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
-
-# Recreate the test/valid data frame
-createDataFrame = function(df,predictor){
-  dfNew = df %>% select(Time, Year, Month, TimeHoursNum,                  # date Time variables
-                        lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
-                        X5amTo8amSlope.NO2.IMP: X2amTo5amSlope.WSPD.IMP)  # arima slopes-proxy
-  dfPred = df[,predictor]
-  dfNew = cbind(dfPred, dfNew)
-  colnames(dfNew)[1] = paste0(predictor)
-  return(dfNew)
-}
-
-updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey1)  
-  
-  inFile$TimeKey1 = as.POSIXct(inFile$TimeKey1)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey1")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey2)  
-  
-  inFile$TimeKey2 = as.POSIXct(inFile$TimeKey2)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey2")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus3Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey3)  
-  
-  inFile$TimeKey3 = as.POSIXct(inFile$TimeKey3)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey3")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus4Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey4)  
-  
-  inFile$TimeKey4 = as.POSIXct(inFile$TimeKey4)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey4")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
-updateDF_tMinus5Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
-  inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
-  inFile = inFile %>% select(predict, TimeKey5)  
-  
-  inFile$TimeKey5 = as.POSIXct(inFile$TimeKey5)  
-  df$Time         = as.POSIXct(df$Time)  
-  
-  df = full_join(df,inFile,by = c("Time" = "TimeKey5")) 
-  df[,lagPredictor] = ifelse(is.na(df$predict),df[,lagPredictor],df$predict)
-  
-  dfNew = df %>% select(everything(), -predict)
-  return(dfNew)
-}
-
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'RAIN', 'RHUM', 'SOLR', 'TEMP', 'WDIR','WSPD')
 
 
 
@@ -1566,9 +1150,18 @@ train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
 # rename the df to df.train, df.test, and df.vali respectively
-df.train = df[train,]
-df.test  = df[-train,]
-df.vali = validationDf
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# # remove year now that validation set has been removed
+# df.train.time = as.h2o(df.train.temp$Time)
+# df.test.time  = as.h2o(df.test.temp$Time)
+# df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
 
 
 
@@ -1687,8 +1280,544 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))
 
 
 
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################   REPEAT EXERCISE ABOVE BUT WITH RESET AT LUNCH  ##############################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+##########################################################################################################################################################################
+
+# LET'S CARRY OUT THE SAME WAY AS ABOVE BUT RESET LAGGED 
+# PREDICT 1-4 HOURS AHEAD FOR 9, 10, 11, 12, THEN RESET AND PREDICT 1-4 HOURS AHEAD FOR 1,2,3,4PM
+# files created above for 1-4 hours ahead are still valid here. 
+# begin with prediction of 1PM (5 hours ahead), but rename the output file so that its 5_hours_ahead_1HR_predict.csv
+
+
+# NEXT IS 1PM PREDICTION ***** RESET ***** THEREFORE USE ACTUAL RECORDED DATA FOR LAGGED VALUES!
+
+```{r}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') 
+
+########################################
+# LOAD SAVED MODEL From Step 1 ABOVE #
+########################################
+for (i in 1:length(response)) {   # 1 is NO2. 
+  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+
+# Load test data frame
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+
+# Set response column and recreate test/vali data frames
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrame(df, responseCol)
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
+
+
+# names(df.test)   # same as df.vali
+#   [1] "NO2"                     "Time"                    "Year"                    "Month"                   "TimeHoursNum"            "lag.1.NO"               
+#   [7] "lag.2.NO"                "lag.3.NO"                "lag.4.NO"                "lag.5.NO"                "lag.1.NO2"               "lag.2.NO2"              
+#  [13] "lag.3.NO2"               "lag.4.NO2"               "lag.5.NO2"               "lag.1.NOX"               "lag.2.NOX"               "lag.3.NOX"              
+#  [19] "lag.4.NOX"               "lag.5.NOX"               "lag.1.O3"                "lag.2.O3"                "lag.3.O3"                "lag.4.O3"               
+#  [25] "lag.5.O3"                "lag.1.PM10"              "lag.2.PM10"              "lag.3.PM10"              "lag.4.PM10"              "lag.5.PM10"             
+#  [31] "lag.1.PM2.5"             "lag.2.PM2.5"             "lag.3.PM2.5"             "lag.4.PM2.5"             "lag.5.PM2.5"             "lag.1.SO2"              
+#  [37] "lag.2.SO2"               "lag.3.SO2"               "lag.4.SO2"               "lag.5.SO2"               "lag.1.BP"                "lag.2.BP"               
+#  [43] "lag.3.BP"                "lag.4.BP"                "lag.5.BP"                "lag.1.RAIN"              "lag.2.RAIN"              "lag.3.RAIN"             
+#  [49] "lag.4.RAIN"              "lag.5.RAIN"              "lag.1.RHUM"              "lag.2.RHUM"              "lag.3.RHUM"              "lag.4.RHUM"             
+#  [55] "lag.5.RHUM"              "lag.1.SOLR"              "lag.2.SOLR"              "lag.3.SOLR"              "lag.4.SOLR"              "lag.5.SOLR"             
+#  [61] "lag.1.TEMP"              "lag.2.TEMP"              "lag.3.TEMP"              "lag.4.TEMP"              "lag.5.TEMP"              "lag.1.WDIR"             
+#  [67] "lag.2.WDIR"              "lag.3.WDIR"              "lag.4.WDIR"              "lag.5.WDIR"              "lag.1.WSPD"              "lag.2.WSPD"             
+#  [73] "lag.3.WSPD"              "lag.4.WSPD"              "lag.5.WSPD"              "X5amTo8amSlope.NO2.IMP"  "X5amTo8amSlope.NO.IMP"   "X5amTo8amSlope.NOX.IMP" 
+#  [79] "X5amTo8amSlope.O3.IMP"   "X5amTo8amSlope.PM10.IMP" "X5amTo8amSlope.SO2.IMP"  "X5amTo8amSlope.BP.IMP"   "X5amTo8amSlope.RAIN.IMP" "X5amTo8amSlope.RHUM.IMP"
+#  [85] "X5amTo8amSlope.SOLR.IMP" "X5amTo8amSlope.TEMP.IMP" "X5amTo8amSlope.WDIR.IMP" "X5amTo8amSlope.WSPD.IMP" "X2amTo5amSlope.NO2.IMP"  "X2amTo5amSlope.NO.IMP"  
+#  [91] "X2amTo5amSlope.NOX.IMP"  "X2amTo5amSlope.O3.IMP"   "X2amTo5amSlope.PM10.IMP" "X2amTo5amSlope.SO2.IMP"  "X2amTo5amSlope.BP.IMP"   "X2amTo5amSlope.RAIN.IMP"
+#  [97] "X2amTo5amSlope.RHUM.IMP" "X2amTo5amSlope.SOLR.IMP" "X2amTo5amSlope.TEMP.IMP" "X2amTo5amSlope.WDIR.IMP" "X2amTo5amSlope.WSPD.IMP"
+
+
+#############################################
+#######      RESETING AT 1PM            #####
+####### NO PREDICTION NEEDED FOR LAGS   #####
+#############################################
+
+#### RUN 10AM PREDICTION #### - factorize Time first so it can be put into h2o data.frame
+df.test$Time = as.factor(df.test$Time)
+df.vali$Time = as.factor(df.vali$Time)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# make a prediction here for train, test, validation set response
+predictions.test  <- h2o.predict(saved_model, df.test.hex)
+predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
+
+# Export the data prediction for the testing and validation data sets
+outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_5_hr_ahead_reset_13.csv')
+filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_5_hr_ahead_reset_13.csv')
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex)) #df.test.time, predictions.test,df.test.hex))
+#colnames(dfExportTest)[1] = 'Time'
+dfExportTest = dfExportTest %>% filter(TimeHoursNum == '13')
+dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
+dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
+dfExportTest$TimeKey3 = as.POSIXct(dfExportTest$Time) + hours(3)
+dfExportTest$TimeKey4 = as.POSIXct(dfExportTest$Time) + hours(4)
+dfExportTest$TimeKey5 = as.POSIXct(dfExportTest$Time) + hours(5)
+keepIdx = which(names(dfExportTest) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportTest = dfExportTest[,keepIdx]
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex)) #df.vali.time, predictions.vali,df.vali.hex))
+# colnames(dfExportVali)[1] = 'Time'
+dfExportVali = dfExportVali %>% filter(TimeHoursNum == '13')
+dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
+dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
+dfExportVali$TimeKey3 = as.POSIXct(dfExportVali$Time) + hours(3)
+dfExportVali$TimeKey4 = as.POSIXct(dfExportVali$Time) + hours(4)
+dfExportVali$TimeKey5 = as.POSIXct(dfExportVali$Time) + hours(5)
+keepIdx = which(names(dfExportVali) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportVali = dfExportVali[,keepIdx]
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+}
+
+```
+
+
+# 1PM PREDICTION HAS JUST BEEN MADE 
 
 
 
+# NEXT IS THE 2PM PREDICTION - use 1PM predicted output as input for lag.1 vars
+
+```{r}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') 
+
+########################################
+# LOAD SAVED MODEL From Step 1 ABOVE #
+########################################
+for (i in 1:length(response)) {   # 1 is NO2. 
+  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
 
 
+# Load test data frame
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+
+# Set response column and recreate test/vali data frames
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrame(df, responseCol)
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
+
+
+# names(df.test)   # same as df.vali
+#   [1] "NO2"                     "Time"                    "Year"                    "Month"                   "TimeHoursNum"            "lag.1.NO"               
+#   [7] "lag.2.NO"                "lag.3.NO"                "lag.4.NO"                "lag.5.NO"                "lag.1.NO2"               "lag.2.NO2"              
+#  [13] "lag.3.NO2"               "lag.4.NO2"               "lag.5.NO2"               "lag.1.NOX"               "lag.2.NOX"               "lag.3.NOX"              
+#  [19] "lag.4.NOX"               "lag.5.NOX"               "lag.1.O3"                "lag.2.O3"                "lag.3.O3"                "lag.4.O3"               
+#  [25] "lag.5.O3"                "lag.1.PM10"              "lag.2.PM10"              "lag.3.PM10"              "lag.4.PM10"              "lag.5.PM10"             
+#  [31] "lag.1.PM2.5"             "lag.2.PM2.5"             "lag.3.PM2.5"             "lag.4.PM2.5"             "lag.5.PM2.5"             "lag.1.SO2"              
+#  [37] "lag.2.SO2"               "lag.3.SO2"               "lag.4.SO2"               "lag.5.SO2"               "lag.1.BP"                "lag.2.BP"               
+#  [43] "lag.3.BP"                "lag.4.BP"                "lag.5.BP"                "lag.1.RAIN"              "lag.2.RAIN"              "lag.3.RAIN"             
+#  [49] "lag.4.RAIN"              "lag.5.RAIN"              "lag.1.RHUM"              "lag.2.RHUM"              "lag.3.RHUM"              "lag.4.RHUM"             
+#  [55] "lag.5.RHUM"              "lag.1.SOLR"              "lag.2.SOLR"              "lag.3.SOLR"              "lag.4.SOLR"              "lag.5.SOLR"             
+#  [61] "lag.1.TEMP"              "lag.2.TEMP"              "lag.3.TEMP"              "lag.4.TEMP"              "lag.5.TEMP"              "lag.1.WDIR"             
+#  [67] "lag.2.WDIR"              "lag.3.WDIR"              "lag.4.WDIR"              "lag.5.WDIR"              "lag.1.WSPD"              "lag.2.WSPD"             
+#  [73] "lag.3.WSPD"              "lag.4.WSPD"              "lag.5.WSPD"              "X5amTo8amSlope.NO2.IMP"  "X5amTo8amSlope.NO.IMP"   "X5amTo8amSlope.NOX.IMP" 
+#  [79] "X5amTo8amSlope.O3.IMP"   "X5amTo8amSlope.PM10.IMP" "X5amTo8amSlope.SO2.IMP"  "X5amTo8amSlope.BP.IMP"   "X5amTo8amSlope.RAIN.IMP" "X5amTo8amSlope.RHUM.IMP"
+#  [85] "X5amTo8amSlope.SOLR.IMP" "X5amTo8amSlope.TEMP.IMP" "X5amTo8amSlope.WDIR.IMP" "X5amTo8amSlope.WSPD.IMP" "X2amTo5amSlope.NO2.IMP"  "X2amTo5amSlope.NO.IMP"  
+#  [91] "X2amTo5amSlope.NOX.IMP"  "X2amTo5amSlope.O3.IMP"   "X2amTo5amSlope.PM10.IMP" "X2amTo5amSlope.SO2.IMP"  "X2amTo5amSlope.BP.IMP"   "X2amTo5amSlope.RAIN.IMP"
+#  [97] "X2amTo5amSlope.RHUM.IMP" "X2amTo5amSlope.SOLR.IMP" "X2amTo5amSlope.TEMP.IMP" "X2amTo5amSlope.WDIR.IMP" "X2amTo5amSlope.WSPD.IMP"
+
+
+# Next: 1-HOUR LAG IS 1PM PREDICTION
+lagPredictor      = paste0('lag.1.',response[i])
+filenameInputVar1  = paste0('greenwich_eltham_',response[i],'_ann_test_5_hr_ahead_reset_13.csv')                          # 5 hr ahead is 1PM prediction taken at 12AM
+df.test = updateDF_tMinus1Lags(df.test, lagPredictor, filenameInputVar1)
+
+# repeat for vali set
+filenameInputVar1  = paste0('greenwich_eltham_',response[i],'_ann_vali_5_hr_ahead_reset_13.csv')                          # 5 hr ahead is 1PM prediction taken at 12AM
+df.vali = updateDF_tMinus1Lags(df.vali, lagPredictor, filenameInputVar1)
+
+#### RUN 10AM PREDICTION #### - factorize Time first so it can be put into h2o data.frame
+df.test$Time = as.factor(df.test$Time)
+df.vali$Time = as.factor(df.vali$Time)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# make a prediction here for train, test, validation set response
+predictions.test  <- h2o.predict(saved_model, df.test.hex)
+predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
+
+# Export the data prediction for the testing and validation data sets
+outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_6_hr_ahead_reset_13.csv')
+filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_6_hr_ahead_reset_13.csv')
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex)) #df.test.time, predictions.test,df.test.hex))
+#colnames(dfExportTest)[1] = 'Time'
+dfExportTest = dfExportTest %>% filter(TimeHoursNum == '14')
+dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
+dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
+dfExportTest$TimeKey3 = as.POSIXct(dfExportTest$Time) + hours(3)
+dfExportTest$TimeKey4 = as.POSIXct(dfExportTest$Time) + hours(4)
+dfExportTest$TimeKey5 = as.POSIXct(dfExportTest$Time) + hours(5)
+keepIdx = which(names(dfExportTest) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportTest = dfExportTest[,keepIdx]
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex)) #df.vali.time, predictions.vali,df.vali.hex))
+# colnames(dfExportVali)[1] = 'Time'
+dfExportVali = dfExportVali %>% filter(TimeHoursNum == '14')
+dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
+dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
+dfExportVali$TimeKey3 = as.POSIXct(dfExportVali$Time) + hours(3)
+dfExportVali$TimeKey4 = as.POSIXct(dfExportVali$Time) + hours(4)
+dfExportVali$TimeKey5 = as.POSIXct(dfExportVali$Time) + hours(5)
+keepIdx = which(names(dfExportVali) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportVali = dfExportVali[,keepIdx]
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+}
+
+```
+
+
+# 2PM PREDICTION HAS JUST BEEN MADE
+
+# NEXT PREDICT THE 3PM - use 1-hr lag from 2pm prediction, and 2-hr lag from 1pm prediction
+
+```{r}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') 
+
+########################################
+# LOAD SAVED MODEL From Step 1 ABOVE #
+########################################
+for (i in 1:length(response)) {   # 1 is NO2. 
+  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+
+# Load test data frame
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+
+# Set response column and recreate test/vali data frames
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrame(df, responseCol)
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
+
+
+# names(df.test)   # same as df.vali
+#   [1] "NO2"                     "Time"                    "Year"                    "Month"                   "TimeHoursNum"            "lag.1.NO"               
+#   [7] "lag.2.NO"                "lag.3.NO"                "lag.4.NO"                "lag.5.NO"                "lag.1.NO2"               "lag.2.NO2"              
+#  [13] "lag.3.NO2"               "lag.4.NO2"               "lag.5.NO2"               "lag.1.NOX"               "lag.2.NOX"               "lag.3.NOX"              
+#  [19] "lag.4.NOX"               "lag.5.NOX"               "lag.1.O3"                "lag.2.O3"                "lag.3.O3"                "lag.4.O3"               
+#  [25] "lag.5.O3"                "lag.1.PM10"              "lag.2.PM10"              "lag.3.PM10"              "lag.4.PM10"              "lag.5.PM10"             
+#  [31] "lag.1.PM2.5"             "lag.2.PM2.5"             "lag.3.PM2.5"             "lag.4.PM2.5"             "lag.5.PM2.5"             "lag.1.SO2"              
+#  [37] "lag.2.SO2"               "lag.3.SO2"               "lag.4.SO2"               "lag.5.SO2"               "lag.1.BP"                "lag.2.BP"               
+#  [43] "lag.3.BP"                "lag.4.BP"                "lag.5.BP"                "lag.1.RAIN"              "lag.2.RAIN"              "lag.3.RAIN"             
+#  [49] "lag.4.RAIN"              "lag.5.RAIN"              "lag.1.RHUM"              "lag.2.RHUM"              "lag.3.RHUM"              "lag.4.RHUM"             
+#  [55] "lag.5.RHUM"              "lag.1.SOLR"              "lag.2.SOLR"              "lag.3.SOLR"              "lag.4.SOLR"              "lag.5.SOLR"             
+#  [61] "lag.1.TEMP"              "lag.2.TEMP"              "lag.3.TEMP"              "lag.4.TEMP"              "lag.5.TEMP"              "lag.1.WDIR"             
+#  [67] "lag.2.WDIR"              "lag.3.WDIR"              "lag.4.WDIR"              "lag.5.WDIR"              "lag.1.WSPD"              "lag.2.WSPD"             
+#  [73] "lag.3.WSPD"              "lag.4.WSPD"              "lag.5.WSPD"              "X5amTo8amSlope.NO2.IMP"  "X5amTo8amSlope.NO.IMP"   "X5amTo8amSlope.NOX.IMP" 
+#  [79] "X5amTo8amSlope.O3.IMP"   "X5amTo8amSlope.PM10.IMP" "X5amTo8amSlope.SO2.IMP"  "X5amTo8amSlope.BP.IMP"   "X5amTo8amSlope.RAIN.IMP" "X5amTo8amSlope.RHUM.IMP"
+#  [85] "X5amTo8amSlope.SOLR.IMP" "X5amTo8amSlope.TEMP.IMP" "X5amTo8amSlope.WDIR.IMP" "X5amTo8amSlope.WSPD.IMP" "X2amTo5amSlope.NO2.IMP"  "X2amTo5amSlope.NO.IMP"  
+#  [91] "X2amTo5amSlope.NOX.IMP"  "X2amTo5amSlope.O3.IMP"   "X2amTo5amSlope.PM10.IMP" "X2amTo5amSlope.SO2.IMP"  "X2amTo5amSlope.BP.IMP"   "X2amTo5amSlope.RAIN.IMP"
+#  [97] "X2amTo5amSlope.RHUM.IMP" "X2amTo5amSlope.SOLR.IMP" "X2amTo5amSlope.TEMP.IMP" "X2amTo5amSlope.WDIR.IMP" "X2amTo5amSlope.WSPD.IMP"
+
+
+
+# use 1-hr lag from 2pm prediction, 
+# and 2-hr lag from 1pm prediction
+
+# Next: 1-HOUR LAG IS 2PM PREDICTION
+lagPredictor      = paste0('lag.1.',response[i])
+filenameInputVar1  = paste0('greenwich_eltham_',response[i],'_ann_test_6_hr_ahead_reset_13.csv')                          # 6 hr ahead is 2PM prediction taken at 12AM
+df.test = updateDF_tMinus1Lags(df.test, lagPredictor, filenameInputVar1)
+
+filenameInputVar1  = paste0('greenwich_eltham_',response[i],'_ann_vali_6_hr_ahead_reset_13.csv')                          # 6 hr ahead is 2PM prediction taken at 12AM
+df.vali = updateDF_tMinus1Lags(df.vali, lagPredictor, filenameInputVar1)
+
+# 2-HOUR LAG IS 1PM PREDICTION
+lagPredictor      = paste0('lag.2.',response[i])
+filenameInputVar2  = paste0('greenwich_eltham_',response[i],'_ann_test_5_hr_ahead_reset_13.csv')                          # 5 hr ahead is 1PM prediction taken at 12AM
+df.test = updateDF_tMinus2Lags(df.test, lagPredictor, filenameInputVar2)
+
+filenameInputVar2  = paste0('greenwich_eltham_',response[i],'_ann_vali_5_hr_ahead_reset_13.csv')                          # 5 hr ahead is 1PM prediction taken at 12AM
+df.vali = updateDF_tMinus2Lags(df.vali, lagPredictor, filenameInputVar2)
+
+
+#### RUN 10AM PREDICTION #### - factorize Time first so it can be put into h2o data.frame
+df.test$Time = as.factor(df.test$Time)
+df.vali$Time = as.factor(df.vali$Time)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# make a prediction here for train, test, validation set response
+predictions.test  <- h2o.predict(saved_model, df.test.hex)
+predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
+
+# Export the data prediction for the testing and validation data sets
+outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_7_hr_ahead_reset_13.csv')
+filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_7_hr_ahead_reset_13.csv')
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex)) #df.test.time, predictions.test,df.test.hex))
+#colnames(dfExportTest)[1] = 'Time'
+dfExportTest = dfExportTest %>% filter(TimeHoursNum == '15')
+dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
+dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
+dfExportTest$TimeKey3 = as.POSIXct(dfExportTest$Time) + hours(3)
+dfExportTest$TimeKey4 = as.POSIXct(dfExportTest$Time) + hours(4)
+dfExportTest$TimeKey5 = as.POSIXct(dfExportTest$Time) + hours(5)
+keepIdx = which(names(dfExportTest) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportTest = dfExportTest[,keepIdx]
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex)) #df.vali.time, predictions.vali,df.vali.hex))
+# colnames(dfExportVali)[1] = 'Time'
+dfExportVali = dfExportVali %>% filter(TimeHoursNum == '15')
+dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
+dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
+dfExportVali$TimeKey3 = as.POSIXct(dfExportVali$Time) + hours(3)
+dfExportVali$TimeKey4 = as.POSIXct(dfExportVali$Time) + hours(4)
+dfExportVali$TimeKey5 = as.POSIXct(dfExportVali$Time) + hours(5)
+keepIdx = which(names(dfExportVali) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportVali = dfExportVali[,keepIdx]
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+}
+
+```
+
+# 3PM PREDICTED ABOVE. 
+
+# next PREDICT 4PM - use 1-hour from 3PM prediction, 2-hour lag from 2PM prediction, and the 3-lag from 3PM prediction. 
+```{r}
+response    = c('NO2', 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') 
+
+########################################
+# LOAD SAVED MODEL From Step 1 ABOVE #
+########################################
+for (i in 1:length(response)) {   # 1 is NO2. 
+  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+
+# Load test data frame
+inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+
+# Set response column and recreate test/vali data frames
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrame(df, responseCol)
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+df.train = df.train.temp %>% select(-Year) #, -Time)
+df.test  = df.test.temp  %>% select(-Year) #, -Time)
+df.vali  = df.vali.temp  %>% select(-Year) #, -Time)
+
+
+# names(df.test)   # same as df.vali
+#   [1] "NO2"                     "Time"                    "Year"                    "Month"                   "TimeHoursNum"            "lag.1.NO"               
+#   [7] "lag.2.NO"                "lag.3.NO"                "lag.4.NO"                "lag.5.NO"                "lag.1.NO2"               "lag.2.NO2"              
+#  [13] "lag.3.NO2"               "lag.4.NO2"               "lag.5.NO2"               "lag.1.NOX"               "lag.2.NOX"               "lag.3.NOX"              
+#  [19] "lag.4.NOX"               "lag.5.NOX"               "lag.1.O3"                "lag.2.O3"                "lag.3.O3"                "lag.4.O3"               
+#  [25] "lag.5.O3"                "lag.1.PM10"              "lag.2.PM10"              "lag.3.PM10"              "lag.4.PM10"              "lag.5.PM10"             
+#  [31] "lag.1.PM2.5"             "lag.2.PM2.5"             "lag.3.PM2.5"             "lag.4.PM2.5"             "lag.5.PM2.5"             "lag.1.SO2"              
+#  [37] "lag.2.SO2"               "lag.3.SO2"               "lag.4.SO2"               "lag.5.SO2"               "lag.1.BP"                "lag.2.BP"               
+#  [43] "lag.3.BP"                "lag.4.BP"                "lag.5.BP"                "lag.1.RAIN"              "lag.2.RAIN"              "lag.3.RAIN"             
+#  [49] "lag.4.RAIN"              "lag.5.RAIN"              "lag.1.RHUM"              "lag.2.RHUM"              "lag.3.RHUM"              "lag.4.RHUM"             
+#  [55] "lag.5.RHUM"              "lag.1.SOLR"              "lag.2.SOLR"              "lag.3.SOLR"              "lag.4.SOLR"              "lag.5.SOLR"             
+#  [61] "lag.1.TEMP"              "lag.2.TEMP"              "lag.3.TEMP"              "lag.4.TEMP"              "lag.5.TEMP"              "lag.1.WDIR"             
+#  [67] "lag.2.WDIR"              "lag.3.WDIR"              "lag.4.WDIR"              "lag.5.WDIR"              "lag.1.WSPD"              "lag.2.WSPD"             
+#  [73] "lag.3.WSPD"              "lag.4.WSPD"              "lag.5.WSPD"              "X5amTo8amSlope.NO2.IMP"  "X5amTo8amSlope.NO.IMP"   "X5amTo8amSlope.NOX.IMP" 
+#  [79] "X5amTo8amSlope.O3.IMP"   "X5amTo8amSlope.PM10.IMP" "X5amTo8amSlope.SO2.IMP"  "X5amTo8amSlope.BP.IMP"   "X5amTo8amSlope.RAIN.IMP" "X5amTo8amSlope.RHUM.IMP"
+#  [85] "X5amTo8amSlope.SOLR.IMP" "X5amTo8amSlope.TEMP.IMP" "X5amTo8amSlope.WDIR.IMP" "X5amTo8amSlope.WSPD.IMP" "X2amTo5amSlope.NO2.IMP"  "X2amTo5amSlope.NO.IMP"  
+#  [91] "X2amTo5amSlope.NOX.IMP"  "X2amTo5amSlope.O3.IMP"   "X2amTo5amSlope.PM10.IMP" "X2amTo5amSlope.SO2.IMP"  "X2amTo5amSlope.BP.IMP"   "X2amTo5amSlope.RAIN.IMP"
+#  [97] "X2amTo5amSlope.RHUM.IMP" "X2amTo5amSlope.SOLR.IMP" "X2amTo5amSlope.TEMP.IMP" "X2amTo5amSlope.WDIR.IMP" "X2amTo5amSlope.WSPD.IMP"
+
+
+
+# use 1-hr lag from 2pm prediction, 
+# and 2-hr lag from 1pm prediction
+
+# Next: 1-HOUR LAG IS 3PM PREDICTION
+lagPredictor      = paste0('lag.1.',response[i])
+filenameInputVar1  = paste0('greenwich_eltham_',response[i],'_ann_test_7_hr_ahead_reset_13.csv')                          # 7 hr ahead is 3PM prediction taken at 12AM
+df.test = updateDF_tMinus1Lags(df.test, lagPredictor, filenameInputVar1)
+
+filenameInputVar1  = paste0('greenwich_eltham_',response[i],'_ann_vali_7_hr_ahead_reset_13.csv')                          # 7 hr ahead is 2PM prediction taken at 12AM
+df.vali = updateDF_tMinus1Lags(df.vali, lagPredictor, filenameInputVar1)
+
+
+# 2-HOUR LAG IS 2PM PREDICTION
+lagPredictor      = paste0('lag.2.',response[i])
+filenameInputVar2  = paste0('greenwich_eltham_',response[i],'_ann_test_6_hr_ahead_reset_13.csv')                          # 6 hr ahead is 2PM prediction taken at 12AM
+df.test = updateDF_tMinus2Lags(df.test, lagPredictor, filenameInputVar2)
+
+filenameInputVar2  = paste0('greenwich_eltham_',response[i],'_ann_vali_6_hr_ahead_reset_13.csv')                          # 6 hr ahead is 2PM prediction taken at 12AM
+df.vali = updateDF_tMinus2Lags(df.vali, lagPredictor, filenameInputVar2)
+
+
+# 3-HOUR LAG IS 1PM PREDICTION
+lagPredictor      = paste0('lag.3.',response[i])
+filenameInputVar3  = paste0('greenwich_eltham_',response[i],'_ann_test_5_hr_ahead_reset_13.csv')                          # 5 hr ahead is 2PM prediction taken at 12AM
+df.test = updateDF_tMinus3Lags(df.test, lagPredictor, filenameInputVar3)
+
+filenameInputVar3  = paste0('greenwich_eltham_',response[i],'_ann_vali_5_hr_ahead_reset_13.csv')                          # 5 hr ahead is 2PM prediction taken at 12AM
+df.vali = updateDF_tMinus3Lags(df.vali, lagPredictor, filenameInputVar3)
+
+
+
+#### RUN 10AM PREDICTION #### - factorize Time first so it can be put into h2o data.frame
+df.test$Time = as.factor(df.test$Time)
+df.vali$Time = as.factor(df.vali$Time)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# make a prediction here for train, test, validation set response
+predictions.test  <- h2o.predict(saved_model, df.test.hex)
+predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
+
+# Export the data prediction for the testing and validation data sets
+outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_8_hr_ahead_reset_13.csv')
+filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_8_hr_ahead_reset_13.csv')
+
+# EXPORT THE TEST DATA SET PREDICTIONS
+dfExportTest = as.data.frame(h2o.cbind(predictions.test,df.test.hex)) #df.test.time, predictions.test,df.test.hex))
+#colnames(dfExportTest)[1] = 'Time'
+dfExportTest = dfExportTest %>% filter(TimeHoursNum == '16')
+dfExportTest$TimeKey1 = as.POSIXct(dfExportTest$Time) + hours(1)
+dfExportTest$TimeKey2 = as.POSIXct(dfExportTest$Time) + hours(2)
+dfExportTest$TimeKey3 = as.POSIXct(dfExportTest$Time) + hours(3)
+dfExportTest$TimeKey4 = as.POSIXct(dfExportTest$Time) + hours(4)
+dfExportTest$TimeKey5 = as.POSIXct(dfExportTest$Time) + hours(5)
+keepIdx = which(names(dfExportTest) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportTest = dfExportTest[,keepIdx]
+write.csv(dfExportTest, file.path(outfilePath,filenameTest))    # to here: we have exported a testing file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+# EXPORT THE VALIDATION DATA SET PREDICTIONS
+dfExportVali = as.data.frame(h2o.cbind(predictions.vali,df.vali.hex)) #df.vali.time, predictions.vali,df.vali.hex))
+# colnames(dfExportVali)[1] = 'Time'
+dfExportVali = dfExportVali %>% filter(TimeHoursNum == '16')
+dfExportVali$TimeKey1 = as.POSIXct(dfExportVali$Time) + hours(1)
+dfExportVali$TimeKey2 = as.POSIXct(dfExportVali$Time) + hours(2)
+dfExportVali$TimeKey3 = as.POSIXct(dfExportVali$Time) + hours(3)
+dfExportVali$TimeKey4 = as.POSIXct(dfExportVali$Time) + hours(4)
+dfExportVali$TimeKey5 = as.POSIXct(dfExportVali$Time) + hours(5)
+keepIdx = which(names(dfExportVali) %in% c(response[i], "predict","Time","TimeKey1","TimeKey2","TimeKey3","TimeKey4","TimeKey5"))
+dfExportVali = dfExportVali[,keepIdx]
+write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
+
+}
+
+```

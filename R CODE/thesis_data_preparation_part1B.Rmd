@@ -479,7 +479,7 @@ dim(df8)
 
 # 4f - for each month we calculate the mean concentrations. then we calc the diff in the value from the mean. 
 ```{r}
-df9 = na.omit(df)                                                                   # remove the NAs since only care about rows which have all observations. 
+df9 = na.omit(df8)                                                                   # remove the NAs since only care about rows which have all observations. 
 dates.over.x.hours = df9 %>% group_by(Date) %>% summarise(n=n()) %>% filter(n==24)   # remove any dates that have less than 24 hours of observations. 
 dates.over.x.hours = dates.over.x.hours[,1]                                          
 dates.over.x.hours                                                                   # 237 dates with 24 hours of observations
@@ -593,19 +593,56 @@ df15 = calculateMonthlyHourlyAverage(df15, 'WSPD.IMP')
 
 ```
 
+# 5a - for each date calculate the prior dates min/max values 0-8 AM 
+
 ```{r}
-# names(df15)
-df15 = df15 %>% select(Date, Time, MMYYYY:TimeHoursNum,                  # date Time variables
+calculateAM.Max = function(df, predictor) {
+  # calc max 0-8AM
+  dfNew = df %>% select_('Date','TimeHoursNum',predictor) %>% filter(TimeHoursNum>=6 & TimeHoursNum <=  8) %>% group_by_('Date') %>% summarise_each(funs(max))
+  dfNew = dfNew %>% select_('Date',predictor)
+  maxColname = paste0('max.6.to.8.AM.',predictor)
+  colnames(dfNew) = c('Date',maxColname)
+  dfNew = inner_join(df, dfNew, by = c("Date" = "Date"))
+  
+  #repeat for min 0-8AM
+  dfNew2 = dfNew %>% select_('Date','TimeHoursNum',predictor) %>% filter(TimeHoursNum>=6 & TimeHoursNum <=  8) %>% group_by_('Date') %>% summarise_each(funs(min))
+  dfNew2 = dfNew2 %>% select_('Date',predictor)
+  minColname = paste0('min.6.to.8.AM.',predictor)
+  colnames(dfNew2) = c('Date',minColname)
+  dfNew2 = inner_join(dfNew, dfNew2, by = c("Date" = "Date"))
+  
+  return(dfNew2)
+}
+
+df16 = calculateAM.Max(df15, 'NO2.IMP')
+df16 = calculateAM.Max(df16, 'NO.IMP')
+df16 = calculateAM.Max(df16, 'NOX.IMP')
+df16 = calculateAM.Max(df16, 'O3.IMP')
+df16 = calculateAM.Max(df16, 'PM10.IMP')
+df16 = calculateAM.Max(df16, 'SO2.IMP')
+df16 = calculateAM.Max(df16, 'BP.IMP')
+df16 = calculateAM.Max(df16, 'RAIN.IMP')
+df16 = calculateAM.Max(df16, 'RHUM.IMP')
+df16 = calculateAM.Max(df16, 'SOLR.IMP')
+df16 = calculateAM.Max(df16, 'TEMP.IMP')
+df16 = calculateAM.Max(df16, 'WDIR.IMP')
+df16 = calculateAM.Max(df16, 'WSPD.IMP')
+
+```
+
+```{r}
+df16 = df16 %>% select(Date, Time, MMYYYY:TimeHoursNum,                  # date Time variables
                     NO:WSPD,                                          # current hour response (actual) variables (include imputed values from other stations)
                     lag.1.NO:lag.5.WSPD,                              # lagged meteorological and pollutant variables
                     NO.IMP:WSPD.IMP,                                  # current hour imputed variables
                     Mean.Monthly.NO2.IMP:Mean.Monthly.WSPD.IMP,       # mean monthly concentration levels
                     Mean.Hourly.Concentration.By.MMYYYY.NO2.IMP: Mean.Hourly.Concentration.By.MMYYYY.WSPD.IMP,   # mean hourly concentration levels (by month)
-                    `5amTo8amSlope.NO2.IMP`:`2amTo5amSlope.WSPD.IMP`) 
-
+                    `5amTo8amSlope.NO2.IMP`:`2amTo5amSlope.WSPD.IMP`,
+                    max.6.to.8.AM.NO2.IMP:min.6.to.8.AM.WSPD.IMP)             # max AM pollutant concentration and max AM meteo vals 
 
 outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED")
-write.csv(df15, file.path(outfilePath,'greenwich_eltham_imputed_school_hours_take2.csv'))
+write.csv(df16, file.path(outfilePath,'greenwich_eltham_imputed_school_hours_take2.csv'))
+dim(df16)  # 1936 x 183
 ```
 
 
