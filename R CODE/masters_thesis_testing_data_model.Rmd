@@ -30,10 +30,10 @@ source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
 inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+df = df[,-1] # remove the X id column - not needed
 
 response          = c('NO2')                           #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') 
 #inputVariableList = c('NO','NO2','NOX','O3','PM10')
-
 
 createDataFrame = function(df,responseCol,params){
   dfParamsInclude   = which(names(df) %in% c(params))
@@ -47,71 +47,20 @@ createDataFrame = function(df,responseCol,params){
 
 #createDataFrame(df, 'NO2', c('NO','NOX','O3'))
 
-combn = data.frame(combn(c('NO','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD'), 2))
+#names(df)
+#combn = data.frame(combn(c('NO','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD'), 1))
+combn = data.frame(combn(names(df), 1))
+
 #combn
 
-#   [1] "X"                                            "Date"                                         "Time"                                        
-#   [4] "MMYYYY"                                       "Year"                                         "Month"                                       
-#   [7] "Week"                                         "Day"                                          "TimeHoursNum"                                
-#  [10] "NO"                                           "NO2"                                          "NOX"                                         
-#  [13] "O3"                                           "PM10"                                         "PM2.5"                                       
-#  [16] "SO2"                                          "BP"                                           "RAIN"                                        
-#  [19] "RHUM"                                         "SOLR"                                         "TEMP"                                        
-#  [22] "WDIR"                                         "WSPD"                                         "lag.1.NO"                                    
-#  [25] "lag.2.NO"                                     "lag.3.NO"                                     "lag.4.NO"                                    
-#  [28] "lag.5.NO"                                     "lag.1.NO2"                                    "lag.2.NO2"                                   
-#  [31] "lag.3.NO2"                                    "lag.4.NO2"                                    "lag.5.NO2"                                   
-#  [34] "lag.1.NOX"                                    "lag.2.NOX"                                    "lag.3.NOX"                                   
-#  [37] "lag.4.NOX"                                    "lag.5.NOX"                                    "lag.1.O3"                                    
-#  [40] "lag.2.O3"                                     "lag.3.O3"                                     "lag.4.O3"                                    
-#  [43] "lag.5.O3"                                     "lag.1.PM10"                                   "lag.2.PM10"                                  
-#  [46] "lag.3.PM10"                                   "lag.4.PM10"                                   "lag.5.PM10"                                  
-#  [49] "lag.1.PM2.5"                                  "lag.2.PM2.5"                                  "lag.3.PM2.5"                                 
-#  [52] "lag.4.PM2.5"                                  "lag.5.PM2.5"                                  "lag.1.SO2"                                   
-#  [55] "lag.2.SO2"                                    "lag.3.SO2"                                    "lag.4.SO2"                                   
-#  [58] "lag.5.SO2"                                    "lag.1.BP"                                     "lag.2.BP"                                    
-#  [61] "lag.3.BP"                                     "lag.4.BP"                                     "lag.5.BP"                                    
-#  [64] "lag.1.RAIN"                                   "lag.2.RAIN"                                   "lag.3.RAIN"                                  
-#  [67] "lag.4.RAIN"                                   "lag.5.RAIN"                                   "lag.1.RHUM"                                  
-#  [70] "lag.2.RHUM"                                   "lag.3.RHUM"                                   "lag.4.RHUM"                                  
-#  [73] "lag.5.RHUM"                                   "lag.1.SOLR"                                   "lag.2.SOLR"                                  
-#  [76] "lag.3.SOLR"                                   "lag.4.SOLR"                                   "lag.5.SOLR"                                  
-#  [79] "lag.1.TEMP"                                   "lag.2.TEMP"                                   "lag.3.TEMP"                                  
-#  [82] "lag.4.TEMP"                                   "lag.5.TEMP"                                   "lag.1.WDIR"                                  
-#  [85] "lag.2.WDIR"                                   "lag.3.WDIR"                                   "lag.4.WDIR"                                  
-#  [88] "lag.5.WDIR"                                   "lag.1.WSPD"                                   "lag.2.WSPD"                                  
-#  [91] "lag.3.WSPD"                                   "lag.4.WSPD"                                   "lag.5.WSPD"                                  
-#  [94] "NO.IMP"                                       "NO2.IMP"                                      "NOX.IMP"                                     
-#  [97] "O3.IMP"                                       "PM10.IMP"                                     "SO2.IMP"                                     
-# [100] "BP.IMP"                                       "RAIN.IMP"                                     "RHUM.IMP"                                    
-# [103] "SOLR.IMP"                                     "TEMP.IMP"                                     "WDIR.IMP"                                    
-# [106] "WSPD.IMP"                                     "Mean.Monthly.NO2.IMP"                         "Mean.Monthly.NO.IMP"                         
-# [109] "Mean.Monthly.NOX.IMP"                         "Mean.Monthly.O3.IMP"                          "Mean.Monthly.PM10.IMP"                       
-# [112] "Mean.Monthly.SO2.IMP"                         "Mean.Monthly.BP.IMP"                          "Mean.Monthly.RAIN.IMP"                       
-# [115] "Mean.Monthly.RHUM.IMP"                        "Mean.Monthly.SOLR.IMP"                        "Mean.Monthly.TEMP.IMP"                       
-# [118] "Mean.Monthly.WDIR.IMP"                        "Mean.Monthly.WSPD.IMP"                        "Mean.Hourly.Concentration.By.MMYYYY.NO2.IMP" 
-# [121] "Mean.Hourly.Concentration.By.MMYYYY.NO.IMP"   "Mean.Hourly.Concentration.By.MMYYYY.NOX.IMP"  "Mean.Hourly.Concentration.By.MMYYYY.O3.IMP"  
-# [124] "Mean.Hourly.Concentration.By.MMYYYY.PM10.IMP" "Mean.Hourly.Concentration.By.MMYYYY.SO2.IMP"  "Mean.Hourly.Concentration.By.MMYYYY.BP.IMP"  
-# [127] "Mean.Hourly.Concentration.By.MMYYYY.RAIN.IMP" "Mean.Hourly.Concentration.By.MMYYYY.RHUM.IMP" "Mean.Hourly.Concentration.By.MMYYYY.SOLR.IMP"
-# [130] "Mean.Hourly.Concentration.By.MMYYYY.TEMP.IMP" "Mean.Hourly.Concentration.By.MMYYYY.WDIR.IMP" "Mean.Hourly.Concentration.By.MMYYYY.WSPD.IMP"
-# [133] "X5amTo8amSlope.NO2.IMP"                       "X5amTo8amSlope.NO.IMP"                        "X5amTo8amSlope.NOX.IMP"                      
-# [136] "X5amTo8amSlope.O3.IMP"                        "X5amTo8amSlope.PM10.IMP"                      "X5amTo8amSlope.SO2.IMP"                      
-# [139] "X5amTo8amSlope.BP.IMP"                        "X5amTo8amSlope.RAIN.IMP"                      "X5amTo8amSlope.RHUM.IMP"                     
-# [142] "X5amTo8amSlope.SOLR.IMP"                      "X5amTo8amSlope.TEMP.IMP"                      "X5amTo8amSlope.WDIR.IMP"                     
-# [145] "X5amTo8amSlope.WSPD.IMP"                      "X2amTo5amSlope.NO2.IMP"                       "X2amTo5amSlope.NO.IMP"                       
-# [148] "X2amTo5amSlope.NOX.IMP"                       "X2amTo5amSlope.O3.IMP"                        "X2amTo5amSlope.PM10.IMP"                     
-# [151] "X2amTo5amSlope.SO2.IMP"                       "X2amTo5amSlope.BP.IMP"                        "X2amTo5amSlope.RAIN.IMP"                     
-# [154] "X2amTo5amSlope.RHUM.IMP"                      "X2amTo5amSlope.SOLR.IMP"                      "X2amTo5amSlope.TEMP.IMP"                     
-# [157] "X2amTo5amSlope.WDIR.IMP"                      "X2amTo5amSlope.WSPD.IMP"                      "max.6.to.8.AM.NO2.IMP"                       
-# [160] "min.6.to.8.AM.NO2.IMP"                        "max.6.to.8.AM.NO.IMP"                         "min.6.to.8.AM.NO.IMP"                        
-# [163] "max.6.to.8.AM.NOX.IMP"                        "min.6.to.8.AM.NOX.IMP"                        "max.6.to.8.AM.O3.IMP"                        
-# [166] "min.6.to.8.AM.O3.IMP"                         "max.6.to.8.AM.PM10.IMP"                       "min.6.to.8.AM.PM10.IMP"                      
-# [169] "max.6.to.8.AM.SO2.IMP"                        "min.6.to.8.AM.SO2.IMP"                        "max.6.to.8.AM.BP.IMP"                        
-# [172] "min.6.to.8.AM.BP.IMP"                         "max.6.to.8.AM.RAIN.IMP"                       "min.6.to.8.AM.RAIN.IMP"                      
-# [175] "max.6.to.8.AM.RHUM.IMP"                       "min.6.to.8.AM.RHUM.IMP"                       "max.6.to.8.AM.SOLR.IMP"                      
-# [178] "min.6.to.8.AM.SOLR.IMP"                       "max.6.to.8.AM.TEMP.IMP"                       "min.6.to.8.AM.TEMP.IMP"                      
-# [181] "max.6.to.8.AM.WDIR.IMP"                       "min.6.to.8.AM.WDIR.IMP"                       "max.6.to.8.AM.WSPD.IMP"                      
-# [184] "min.6.to.8.AM.WSPD.IMP"                      
+
+# Steps: 
+  # loop through and select one variable model
+  # loop through and select two variable model using all but the one var already selected
+  # loop through and select three variable model using all but the two vars already selected
+  
+# at each loop we need to evaluate which var has the lowest MAE
+
 
 # dim(temp)[2]  # is the column count 
 # for (i in 1:2){
@@ -147,7 +96,7 @@ for (i in 1:1){
   # 
 
   colcount = dim(df.train.hex)[2]
-  df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10), 
+  df.train.dl <- h2o.deeplearning(x = 2:2, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10), 
                                  distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
 
   mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE)
@@ -167,19 +116,34 @@ for (i in 1:1){
   
 }
 
-results
-combn
+#results
+#combn
 
 x = results %>%
   group_by(responseCol, j) %>%
-  summarise(test = toString(inputVarCol)) %>%
+  summarise(predictorVar = toString(inputVarCol)) %>%
   ungroup()
 x
 
 # next: i need to join back to the 'j' col the output for the mae.train, mae.test, and mae.vali
 y = inner_join(x, results, by=("j" = "j"))
 y = y %>% group_by(j) %>% filter(row_number(mae.train) == 1)
-y %>% select(responseCol.x, test, mae.train, mae.test, mae.xval)
+y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
+y = y[,-1]
+y
+
+# at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval
+y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.xval))
+
+# next up -- since we know to include NOX then what is the next variable to pick?
+runningVarsTemp = c()
+runningVarsTemp = y$predictorVar
+runningVars     = c(runningVars, runningVarsTemp)
+runningVars
+
+combn = data.frame(combn(c('NO','NOX','O3','PM10','PM2.5','SO2','BP','RAIN','RHUM','SOLR','TEMP','WDIR','WSPD'), 1))
+
+
 
 ```
 
