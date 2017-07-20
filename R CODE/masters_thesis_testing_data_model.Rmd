@@ -22,13 +22,14 @@ localH2O = h2o.init(nthreads=-1)
 
 
 ```{r}
+#install.packages('lubridate')
 library(dplyr)
 library(lubridate)
-codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
 source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
-modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS") 
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 
@@ -239,19 +240,31 @@ chosenVar = as.vector(y$predictorVar)
 #localH2O = h2o.init(nthreads=-1)
 
 
-chosenVar       = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2")
-mae.xval.latest = c(4.544425, 4.360116, 4.259163)
+#chosenVar       = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2")
+#chosenVar = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2", "lag.1.NO", "TimeHoursNum")
+#mae.xval.latest = c(4.544425, 4.360116, 4.259163, 4.120617, 4.042997)
 
+
+createDataFrame = function(df,responseCol,params){
+  dfParamsInclude   = which(names(df) %in% c(params))
+  dfNewParams       = df[,dfParamsInclude]
+  dfNewResponseInc  = which(names(df) %in% c(responseCol))
+  dfNewResponse     = df[,dfNewResponseInc]
+  dfNew             = cbind(dfNewResponse, dfNewParams)
+  colnames(dfNew)[1] = paste0(responseCol)
+  return(dfNew)
+}
 
 for (i in 1:1){
 
-response        = 'NO2'
+response        = c('NO2')
 results         = c()
 # get data set fields that I can use in the model. 
-dropIdx               = which(names(df) %in% c(response, chosenVar))
+dropIdx               = which(names(df) %in% c(response, chosenVar)) #chosenVar[length(chosenVar)])) #chosenVar))
 dfPredictors          = df[,-dropIdx]
 predictorVariableList = names(dfPredictors)
 #length(predictorVariableList)
+
 
 # get all values in data frame that are remaining... 
 combn = data.frame(combn(predictorVariableList, 1))
@@ -272,6 +285,7 @@ test = -train
       
     # create the data frame
     #paramList = as.list(t(combn[j]))    # for this next loop we need to add chosenVar's + 1 from each combn
+    #listVars  = chosenVar[length(chosenVar)]
     paramList = append(chosenVar, as.list(t(combn[j])))
     dfNew = createDataFrame(df, response[i], paramList)
      
@@ -315,7 +329,7 @@ x = results %>%
 # next: i need to join back to the 'j' col the output for the mae.train, mae.test, and mae.vali
 y = inner_join(x, results, by=("j" = "j"))
 y = y %>% group_by(j) %>% filter(row_number(mae.train) == 1)
-y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
+y = y %>% select(j, responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
 y = y[,-1]  # remove the 'j'!!
 
 # at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval
@@ -324,17 +338,17 @@ y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.
 # variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425 
 # variable 2 selected for predicting NO2 is the lag.1.SOLR.                The mae.xval is 4.360116
 # variable 3 selected for predicting NO2 is the lag.2.NO2.                 The mae.xval is 4.259163
-chosenVar       = append(chosenVar, y$predictorVar)
+addPredictorVar = unlist(strsplit(y$predictorVar, split=", "))
+chosenVar       = append(chosenVar, addPredictorVar[length(addPredictorVar)]) #y$predictorVar)
 mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
 
 }
 
-
 chosenVar
 mae.xval.latest
 
-
 ```
+
 
 
 
