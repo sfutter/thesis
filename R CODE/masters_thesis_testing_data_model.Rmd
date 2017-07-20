@@ -234,31 +234,34 @@ chosenVar = as.vector(y$predictorVar)
 ### NEXT START HERE ###
 
 ```{r}
+
+#library(h2o)
+#localH2O = h2o.init(nthreads=-1)
+
+
+chosenVar       = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2")
+mae.xval.latest = c(4.544425, 4.360116, 4.259163)
+
+
+for (i in 1:1){
+
+response        = 'NO2'
+results         = c()
 # get data set fields that I can use in the model. 
 dropIdx               = which(names(df) %in% c(response, chosenVar))
 dfPredictors          = df[,-dropIdx]
 predictorVariableList = names(dfPredictors)
-length(predictorVariableList)
+#length(predictorVariableList)
 
 # get all values in data frame that are remaining... 
 combn = data.frame(combn(predictorVariableList, 1))
-#paramList = append(chosenVar, as.list(t(combn[1])))
 
-                  
 set.seed(123)
 smp.size = floor(0.70 * nrow(df))
 train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
-results   = c()
-#chosenVar = c()
-chosenVar = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2")
 
-#mae.xval.latest = c()
-mae.xval.latest = c(4.544425, 4.360116, 4.259163)
-
-for (i in 1:1){
-  mae.xval.prior = 
   if(mae.xval.latest[length(mae.xval.latest)] > mae.xval.latest[length(mae.xval.latest)-1]) {
     break
   }
@@ -327,8 +330,12 @@ mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
 }
 
 
+chosenVar
+mae.xval.latest
+
 
 ```
+
 
 
 
