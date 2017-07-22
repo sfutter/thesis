@@ -42,13 +42,12 @@ nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining 
 
 # split out the non validation data frame into training and test data
 df = nonValidationDf
-
 ```
 
 
+
+
 ```{r}
-# record time taken by process
-ptm <- proc.time()
 
 createDataFrame = function(df,responseCol,params){
   dfParamsInclude   = which(names(df) %in% c(params))
@@ -60,23 +59,22 @@ createDataFrame = function(df,responseCol,params){
   return(dfNew)
 }
 
-
 chosenVar        = c()
 mae.train.latest = c()
 mae.test.latest  = c()
 mae.xval.latest  = c()
 
-for (loopi in 1:10){
+for (i in 1:6){
 
 response        = c('NO2')
 results         = c()
 
 # get data set fields that I can use in the model. 
-dropIdx               = which(names(df) %in% c(response, chosenVar)) #chosenVar[length(chosenVar)])) #chosenVar))
+dropIdx               = which(names(df) %in% c(Year, MMYYYY, response, chosenVar)) #chosenVar[length(chosenVar)])) #chosenVar))
 dfPredictors          = df[,-dropIdx]
 predictorVariableList = names(dfPredictors)
 #length(predictorVariableList)
-#bunny #shagbear
+
 
 # get all values in data frame that are remaining and find all combinations of each --> i changed this to be '1' var added each time so combination no longer needed, but i keep for future ref and change the combination to '1' var.
 combn = data.frame(combn(predictorVariableList, 1))
@@ -86,11 +84,11 @@ smp.size = floor(0.70 * nrow(df))
 train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
-if (loopi > 1) {  # note that teh first loop through we don't have any values for mae.xval so we need to skip this section
-  if(mae.xval.latest[length(mae.xval.latest)] > mae.xval.latest[length(mae.xval.latest)-1]) {
-    break
+  if(length(mae.xval.latest)>1){
+    if(mae.xval.latest[length(mae.xval.latest)] > mae.xval.latest[length(mae.xval.latest)-1]) {
+      break
+    }
   }
-
   
   for (i in 1:1){
 
@@ -101,8 +99,7 @@ if (loopi > 1) {  # note that teh first loop through we don't have any values fo
     #listVars  = chosenVar[length(chosenVar)]
     paramList = append(chosenVar, as.list(t(combn[j])))
     dfNew = createDataFrame(df, response[i], paramList)
-    
-    
+     
     # # rename the df to df.train, df.test, and df.vali respectively
     df.train = dfNew[train,]
     df.test  = dfNew[-train,]
@@ -112,13 +109,9 @@ if (loopi > 1) {  # note that teh first loop through we don't have any values fo
     df.test.hex <- as.h2o(df.test)
     # 
   
-    if(loopi == '1'){
-      colcount = 2 # on first loop through colcount is 2 because there is only the response and one predictor var
-    } else {
-      colcount = dim(df.train.hex)[2]
-    }
-    
-    df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10), 
+    colcount = dim(df.train.hex)[2]
+    nodes_layer1 = ceiling(colcount/2)
+    df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(nodes_layer1), 
                                    distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
   
     mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE)
@@ -137,8 +130,6 @@ if (loopi > 1) {  # note that teh first loop through we don't have any values fo
 
   
   }
-
-
 
 # note - had to re-do results since the adding of results to the last results table doesnt work for the 'toString' section.
 #results = results[129:382,]
@@ -165,7 +156,6 @@ mae.train.latest = append(mae.train.latest,min(y$mae.train))
 mae.test.latest = append(mae.test.latest,min(y$mae.test))
 mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
 
-}
 
 }
 
@@ -173,11 +163,21 @@ chosenVar
 mae.train.latest
 mae.test.latest
 mae.xval.latest
-proc.time() - ptm
+
+# EXPORT RESULTS TO CSV 
+# NO2 - cross validation with half as many nodes rounded up is:
+# [1] "lag.1.NO2" "MMYYYY"    "lag.2.NO2" "RHUM"     
+# [1] 4.702829 4.410815 3.993891 4.054605
+# [1] 5.128614 4.640433 4.268468 4.326089
+# [1] 4.802746 4.505613 4.128416 4.245010
+
+# Export the data prediction for the testing and validation data sets
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
+dfExportResultsNO2 = data.frame(chosenVar, mae.train.latest, mae.test.latest, mae.xval.latest, 1)
+write.csv(dfExportResultsNO2, file.path(outfilePath,'dfExportResultsNO2.csv')) 
+
 
 ```
-
-
 
 
 
@@ -380,7 +380,6 @@ proc.time() - ptm
 <!-- # Next: lets create a 3 variable model -->
 
 <!-- ### NEXT START HERE ### -->
-
 
 
 
