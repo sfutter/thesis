@@ -35,216 +35,20 @@ df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"
 
 # get data set fields that I can use in the model. 
 df                    = df %>% select( NO2, MMYYYY, Year, Month, Week, Day, TimeHoursNum, BP:WSPD, lag.1.NO:lag.5.WSPD, X5amTo8amSlope.NO2.IMP:min.6.to.8.AM.WSPD.IMP )
-response              = c('NO2')    
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
 ```
 
 
 ```{r}
-
-chosenVar             = c()
-dropIdx               = which(names(df) %in% c(response, chosenVar))
-dfPredictors          = df[,-dropIdx]
-predictorVariableList = names(dfPredictors)
-
-
-createDataFrame = function(df,responseCol,params){
-  dfParamsInclude   = which(names(df) %in% c(params))
-  dfNewParams       = df[,dfParamsInclude]
-  dfNewResponseInc  = which(names(df) %in% c(responseCol))
-  dfNewResponse     = df[,dfNewResponseInc]
-  dfNew             = cbind(dfNewResponse, dfNewParams)
-  colnames(dfNew)[1] = paste0(responseCol)
-  return(dfNew)
-}
-
-# get all values in data frame that are remaining... 
-combn = data.frame(combn(predictorVariableList, 1))
-
-
-# separate data into 70-30 split ***** NOTE I HAVEN'T REMOVE THE 2014 DATA *****
-set.seed(123)
-smp.size = floor(0.70 * nrow(df))
-train = sample(seq_len(nrow(df)), size = smp.size)
-test = -train
-
-results = data.frame()
-
-
-for (i in 1:1){
-
-  for (j in 1:dim(combn)[2]){  
-    
-  # create the data frame
-  paramList = as.list(t(combn[j]))
-  dfNew = createDataFrame(df, response[i], paramList)
-   
-  # # rename the df to df.train, df.test, and df.vali respectively
-  df.train = dfNew[train,]
-  df.test  = dfNew[-train,]
-  # 
-  # # create h2o-ready frame
-  df.train.hex <- as.h2o(df.train)
-  df.test.hex <- as.h2o(df.test)
-  # 
-
-  colcount = dim(df.train.hex)[2]
-  df.train.dl <- h2o.deeplearning(x = 2:2, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10), 
-                                 distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
-
-  mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE)
-  mae.test  = h2o.mae(df.train.dl, train = FALSE, valid = TRUE,  xval=FALSE)
-  mae.xval  = h2o.mae(df.train.dl, train = FALSE, valid = FALSE, xval=TRUE)
-
-  # next: create the results table which will be a csv file with response, inputVariableName(s), mae train, test, and vali as other columns
-  responseCol = response[i]
-  inputVarCol = as.character(t(paramList))
-
-  results.temp = data.frame(responseCol, j, inputVarCol, mae.train, mae.test, mae.xval)  #
-  results = rbind(results, results.temp)
-
-
-  }
-
-  
-}
-
-
-x = results %>%
-  group_by(responseCol, j) %>%
-  summarise(predictorVar = toString(inputVarCol)) %>%
-  ungroup()
-x
-
-# next: i need to join back to the 'j' col the output for the mae.train, mae.test, and mae.vali
-y = inner_join(x, results, by=("j" = "j"))
-y = y %>% group_by(j) %>% filter(row_number(mae.train) == 1)
-y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
-y = y[,-1]
-y
-
-# at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval
-y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.xval))
-
-# variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. 
-#The mae.xval is 4.544425. 
-# next we need to re-run using the lag.1.NO2 as the first input variable. 
-
-chosenVar = append(chosenVar, y$predictorVar)
-
-
-```
-
-# variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425. 
-# next we need to re-run using the lag.1.NO2 as the first input variable. 
-# VARIABLE NUMBER 1:
-# responseCol.x = NO2
-# predictorVar  = lag.1.NO2
-# mae.xval    = 4.544425	
-
-
-# VARIABLE NUMBER 2 = ?
-```{r}
-
-
-# get data set fields that I can use in the model. 
-dropIdx               = which(names(df) %in% c(response, chosenVar))
-dfPredictors          = df[,-dropIdx]
-predictorVariableList = names(dfPredictors)
-
-# get all values in data frame that are remaining... 
-combn = data.frame(combn(predictorVariableList, 1))
-#paramList = append(chosenVar, as.list(t(combn[1])))
-
-                  
-set.seed(123)
-smp.size = floor(0.70 * nrow(df))
-train = sample(seq_len(nrow(df)), size = smp.size)
-test = -train
-
-results = c()
-# chosenVar = as.vector(chosenVar)
-
-for (i in 1:1){
-
-  for (j in 1:dim(combn)[2]){  
-    
-  # create the data frame
-  #paramList = as.list(t(combn[j]))    # for this next loop we need to add chosenVar's + 1 from each combn
-  paramList = append(chosenVar, as.list(t(combn[j])))
-  dfNew = createDataFrame(df, response[i], paramList)
-   
-  # # rename the df to df.train, df.test, and df.vali respectively
-  df.train = dfNew[train,]
-  df.test  = dfNew[-train,]
-  # 
-  # # create h2o-ready frame
-  df.train.hex <- as.h2o(df.train)
-  df.test.hex <- as.h2o(df.test)
-  # 
-
-  colcount = dim(df.train.hex)[2]
-  df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10), 
-                                 distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
-
-  mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE)
-  mae.test  = h2o.mae(df.train.dl, train = FALSE, valid = TRUE,  xval=FALSE)
-  mae.xval  = h2o.mae(df.train.dl, train = FALSE, valid = FALSE, xval=TRUE)
-
-  # next: create the results table which will be a csv file with response, inputVariableName(s), mae train, test, and vali as other columns
-  responseCol = response[i]
-  inputVarCol = as.character(t(paramList))
-
-  results.temp = data.frame(responseCol, j, inputVarCol, mae.train, mae.test, mae.xval)  #
-  results = rbind(results, results.temp)
-
-
-  }
-
-  
-}
-
-# note - had to re-do results since the adding of results to the last results table doesnt work for the 'toString' section.
-#results = results[129:382,]
-x = results %>%
-  group_by(responseCol, j) %>%
-  summarise(predictorVar = toString(inputVarCol)) %>%
-  ungroup()
-x
-
-# next: i need to join back to the 'j' col the output for the mae.train, mae.test, and mae.vali
-y = inner_join(x, results, by=("j" = "j"))
-y = y %>% group_by(j) %>% filter(row_number(mae.train) == 1)
-y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
-y = y[,-1]  # remove the 'j'!!
-y
-
-# at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval
-y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.xval))
-y
-
-# variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425. 
-# variable 2 selected for predicting NO2 is the lag.1.SOLR.                The mae.xval is 4.360116.
-chosenVar = as.vector(y$predictorVar)
-# chosenVar = c("lag.1.NO2", "lag.1.SOLR")  # had to add manually here as lost Rstudio for temp while
-
-# not right here, but need to make a check here at a future point on whether the mae.xval prior is > mae.xval new.
-```
-
-# to this point we have selected a 2 variable model for NO2: lag.1.NO2 and lag.1.SOLR. 
-# Next: lets create a 3 variable model
-
-### NEXT START HERE ###
-
-```{r}
-
-#library(h2o)
-#localH2O = h2o.init(nthreads=-1)
-
-
-#chosenVar       = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2")
-#chosenVar = c("lag.1.NO2", "lag.1.SOLR", "lag.2.NO2", "lag.1.NO", "TimeHoursNum")
-#mae.xval.latest = c(4.544425, 4.360116, 4.259163, 4.120617, 4.042997)
-
+# record time taken by process
+ptm <- proc.time()
 
 createDataFrame = function(df,responseCol,params){
   dfParamsInclude   = which(names(df) %in% c(params))
@@ -257,10 +61,12 @@ createDataFrame = function(df,responseCol,params){
 }
 
 
-chosenVar             = c()
+chosenVar        = c()
+mae.train.latest = c()
+mae.test.latest  = c()
+mae.xval.latest  = c()
 
-
-for (i in 1:1){
+for (loopi in 1:10){
 
 response        = c('NO2')
 results         = c()
@@ -270,7 +76,7 @@ dropIdx               = which(names(df) %in% c(response, chosenVar)) #chosenVar[
 dfPredictors          = df[,-dropIdx]
 predictorVariableList = names(dfPredictors)
 #length(predictorVariableList)
-
+#bunny #shagbear
 
 # get all values in data frame that are remaining and find all combinations of each --> i changed this to be '1' var added each time so combination no longer needed, but i keep for future ref and change the combination to '1' var.
 combn = data.frame(combn(predictorVariableList, 1))
@@ -280,10 +86,11 @@ smp.size = floor(0.70 * nrow(df))
 train = sample(seq_len(nrow(df)), size = smp.size)
 test = -train
 
-
+if (loopi > 1) {  # note that teh first loop through we don't have any values for mae.xval so we need to skip this section
   if(mae.xval.latest[length(mae.xval.latest)] > mae.xval.latest[length(mae.xval.latest)-1]) {
     break
   }
+
   
   for (i in 1:1){
 
@@ -294,7 +101,8 @@ test = -train
     #listVars  = chosenVar[length(chosenVar)]
     paramList = append(chosenVar, as.list(t(combn[j])))
     dfNew = createDataFrame(df, response[i], paramList)
-     
+    
+    
     # # rename the df to df.train, df.test, and df.vali respectively
     df.train = dfNew[train,]
     df.test  = dfNew[-train,]
@@ -304,7 +112,12 @@ test = -train
     df.test.hex <- as.h2o(df.test)
     # 
   
-    colcount = dim(df.train.hex)[2]
+    if(loopi == '1'){
+      colcount = 2 # on first loop through colcount is 2 because there is only the response and one predictor var
+    } else {
+      colcount = dim(df.train.hex)[2]
+    }
+    
     df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10), 
                                    distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
   
@@ -325,6 +138,8 @@ test = -train
   
   }
 
+
+
 # note - had to re-do results since the adding of results to the last results table doesnt work for the 'toString' section.
 #results = results[129:382,]
 x = results %>%
@@ -339,21 +154,234 @@ y = y %>% select(j, responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
 y = y[,-1]  # remove the 'j'!!
 
 # at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval
-y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.xval))
+y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval) %>% slice(which.min(mae.xval))
 
 # variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425 
 # variable 2 selected for predicting NO2 is the lag.1.SOLR.                The mae.xval is 4.360116
 # variable 3 selected for predicting NO2 is the lag.2.NO2.                 The mae.xval is 4.259163
 addPredictorVar = unlist(strsplit(y$predictorVar, split=", "))
 chosenVar       = append(chosenVar, addPredictorVar[length(addPredictorVar)]) #y$predictorVar)
+mae.train.latest = append(mae.train.latest,min(y$mae.train))
+mae.test.latest = append(mae.test.latest,min(y$mae.test))
 mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
 
 }
 
+}
+
 chosenVar
+mae.train.latest
+mae.test.latest
 mae.xval.latest
+proc.time() - ptm
 
 ```
+
+
+
+
+
+
+
+
+
+<!-- ```{r} -->
+
+<!-- chosenVar             = c() -->
+<!-- dropIdx               = which(names(df) %in% c(response, chosenVar)) -->
+<!-- dfPredictors          = df[,-dropIdx] -->
+<!-- predictorVariableList = names(dfPredictors) -->
+
+
+<!-- createDataFrame = function(df,responseCol,params){ -->
+<!--   dfParamsInclude   = which(names(df) %in% c(params)) -->
+<!--   dfNewParams       = df[,dfParamsInclude] -->
+<!--   dfNewResponseInc  = which(names(df) %in% c(responseCol)) -->
+<!--   dfNewResponse     = df[,dfNewResponseInc] -->
+<!--   dfNew             = cbind(dfNewResponse, dfNewParams) -->
+<!--   colnames(dfNew)[1] = paste0(responseCol) -->
+<!--   return(dfNew) -->
+<!-- } -->
+
+<!-- # get all values in data frame that are remaining...  -->
+<!-- combn = data.frame(combn(predictorVariableList, 1)) -->
+
+
+<!-- # separate data into 70-30 split ***** NOTE I HAVEN'T REMOVE THE 2014 DATA ***** -->
+<!-- set.seed(123) -->
+<!-- smp.size = floor(0.70 * nrow(df)) -->
+<!-- train = sample(seq_len(nrow(df)), size = smp.size) -->
+<!-- test = -train -->
+
+<!-- results = data.frame() -->
+
+
+<!-- for (i in 1:1){ -->
+
+<!--   for (j in 1:dim(combn)[2]){   -->
+
+<!--   # create the data frame -->
+<!--   paramList = as.list(t(combn[j])) -->
+<!--   dfNew = createDataFrame(df, response[i], paramList) -->
+
+<!--   # # rename the df to df.train, df.test, and df.vali respectively -->
+<!--   df.train = dfNew[train,] -->
+<!--   df.test  = dfNew[-train,] -->
+<!--   #  -->
+<!--   # # create h2o-ready frame -->
+<!--   df.train.hex <- as.h2o(df.train) -->
+<!--   df.test.hex <- as.h2o(df.test) -->
+<!--   #  -->
+
+<!--   colcount = dim(df.train.hex)[2] -->
+<!--   df.train.dl <- h2o.deeplearning(x = 2:2, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10),  -->
+<!--                                  distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10)  -->
+
+<!--   mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE) -->
+<!--   mae.test  = h2o.mae(df.train.dl, train = FALSE, valid = TRUE,  xval=FALSE) -->
+<!--   mae.xval  = h2o.mae(df.train.dl, train = FALSE, valid = FALSE, xval=TRUE) -->
+
+<!--   # next: create the results table which will be a csv file with response, inputVariableName(s), mae train, test, and vali as other columns -->
+<!--   responseCol = response[i] -->
+<!--   inputVarCol = as.character(t(paramList)) -->
+
+<!--   results.temp = data.frame(responseCol, j, inputVarCol, mae.train, mae.test, mae.xval)  # -->
+<!--   results = rbind(results, results.temp) -->
+
+
+<!--   } -->
+
+
+<!-- } -->
+
+
+<!-- x = results %>% -->
+<!--   group_by(responseCol, j) %>% -->
+<!--   summarise(predictorVar = toString(inputVarCol)) %>% -->
+<!--   ungroup() -->
+<!-- x -->
+
+<!-- # next: i need to join back to the 'j' col the output for the mae.train, mae.test, and mae.vali -->
+<!-- y = inner_join(x, results, by=("j" = "j")) -->
+<!-- y = y %>% group_by(j) %>% filter(row_number(mae.train) == 1) -->
+<!-- y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval) -->
+<!-- y = y[,-1] -->
+<!-- y -->
+
+<!-- # at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval -->
+<!-- y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.xval)) -->
+
+<!-- # variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there.  -->
+<!-- #The mae.xval is 4.544425.  -->
+<!-- # next we need to re-run using the lag.1.NO2 as the first input variable.  -->
+
+<!-- chosenVar = append(chosenVar, y$predictorVar) -->
+
+
+<!-- ``` -->
+
+<!-- # variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425.  -->
+<!-- # next we need to re-run using the lag.1.NO2 as the first input variable.  -->
+<!-- # VARIABLE NUMBER 1: -->
+<!-- # responseCol.x = NO2 -->
+<!-- # predictorVar  = lag.1.NO2 -->
+<!-- # mae.xval    = 4.544425	 -->
+
+
+<!-- # VARIABLE NUMBER 2 = ? -->
+<!-- ```{r} -->
+
+
+<!-- # get data set fields that I can use in the model.  -->
+<!-- dropIdx               = which(names(df) %in% c(response, chosenVar)) -->
+<!-- dfPredictors          = df[,-dropIdx] -->
+<!-- predictorVariableList = names(dfPredictors) -->
+
+<!-- # get all values in data frame that are remaining...  -->
+<!-- combn = data.frame(combn(predictorVariableList, 1)) -->
+<!-- #paramList = append(chosenVar, as.list(t(combn[1]))) -->
+
+
+<!-- set.seed(123) -->
+<!-- smp.size = floor(0.70 * nrow(df)) -->
+<!-- train = sample(seq_len(nrow(df)), size = smp.size) -->
+<!-- test = -train -->
+
+<!-- results = c() -->
+<!-- # chosenVar = as.vector(chosenVar) -->
+
+<!-- for (i in 1:1){ -->
+
+<!--   for (j in 1:dim(combn)[2]){   -->
+
+<!--   # create the data frame -->
+<!--   #paramList = as.list(t(combn[j]))    # for this next loop we need to add chosenVar's + 1 from each combn -->
+<!--   paramList = append(chosenVar, as.list(t(combn[j]))) -->
+<!--   dfNew = createDataFrame(df, response[i], paramList) -->
+
+<!--   # # rename the df to df.train, df.test, and df.vali respectively -->
+<!--   df.train = dfNew[train,] -->
+<!--   df.test  = dfNew[-train,] -->
+<!--   #  -->
+<!--   # # create h2o-ready frame -->
+<!--   df.train.hex <- as.h2o(df.train) -->
+<!--   df.test.hex <- as.h2o(df.test) -->
+<!--   #  -->
+
+<!--   colcount = dim(df.train.hex)[2] -->
+<!--   df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(10),  -->
+<!--                                  distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10)  -->
+
+<!--   mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE) -->
+<!--   mae.test  = h2o.mae(df.train.dl, train = FALSE, valid = TRUE,  xval=FALSE) -->
+<!--   mae.xval  = h2o.mae(df.train.dl, train = FALSE, valid = FALSE, xval=TRUE) -->
+
+<!--   # next: create the results table which will be a csv file with response, inputVariableName(s), mae train, test, and vali as other columns -->
+<!--   responseCol = response[i] -->
+<!--   inputVarCol = as.character(t(paramList)) -->
+
+<!--   results.temp = data.frame(responseCol, j, inputVarCol, mae.train, mae.test, mae.xval)  # -->
+<!--   results = rbind(results, results.temp) -->
+
+
+<!--   } -->
+
+
+<!-- } -->
+
+<!-- # note - had to re-do results since the adding of results to the last results table doesnt work for the 'toString' section. -->
+<!-- #results = results[129:382,] -->
+<!-- x = results %>% -->
+<!--   group_by(responseCol, j) %>% -->
+<!--   summarise(predictorVar = toString(inputVarCol)) %>% -->
+<!--   ungroup() -->
+<!-- x -->
+
+<!-- # next: i need to join back to the 'j' col the output for the mae.train, mae.test, and mae.vali -->
+<!-- y = inner_join(x, results, by=("j" = "j")) -->
+<!-- y = y %>% group_by(j) %>% filter(row_number(mae.train) == 1) -->
+<!-- y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval) -->
+<!-- y = y[,-1]  # remove the 'j'!! -->
+<!-- y -->
+
+<!-- # at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval -->
+<!-- y = y %>% select(responseCol.x, predictorVar, mae.xval) %>% slice(which.min(mae.xval)) -->
+<!-- y -->
+
+<!-- # variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425.  -->
+<!-- # variable 2 selected for predicting NO2 is the lag.1.SOLR.                The mae.xval is 4.360116. -->
+<!-- chosenVar = as.vector(y$predictorVar) -->
+<!-- # chosenVar = c("lag.1.NO2", "lag.1.SOLR")  # had to add manually here as lost Rstudio for temp while -->
+
+<!-- # not right here, but need to make a check here at a future point on whether the mae.xval prior is > mae.xval new. -->
+<!-- ``` -->
+
+<!-- # to this point we have selected a 2 variable model for NO2: lag.1.NO2 and lag.1.SOLR.  -->
+<!-- # Next: lets create a 3 variable model -->
+
+<!-- ### NEXT START HERE ### -->
+
+
 
 
 
