@@ -22,6 +22,8 @@ localH2O = h2o.init(nthreads=-1)
 
 
 ```{r}
+#install.packages("beepr")
+library(beepr)
 library(dplyr)
 library(lubridate)
 codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
@@ -31,8 +33,8 @@ modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS")
 inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
-nodeCount = c(5)
-response        = c('O3') 
+nodeCount = c(9) #ceiling(colcount/2),5,10)
+response        = c('NO2') 
 
 for (nodeNum in 1:length(nodeCount)){
 # get data set fields that I can use in the model. 
@@ -208,7 +210,7 @@ if (length(chosenVar)==2) {
 # # Export the data prediction for the testing and validation data sets
 outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
 dfExportResults = data.frame(chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final, 1)
-dfExportResults
+#dfExportResults
 
 # get min mae.xval predictor inputs
 dfExportResults2 = dfExportResults %>%
@@ -221,7 +223,7 @@ colnames(dfExportResults2)[length(dfExportResults2)] = 'chosenVar.final'
 dfExport = dfExportResults2 %>% select(chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final) %>% slice(which.min(mae.xval.latest.final))
 dfExport$nodes = as.factor(nodeCount[nodeNum]) #'ceiling(input var count *0.5)')   #,10,5)
 dfExport$response = response[1]  # should be O3 now..  #c('NOX') #, 'NO', 'NO')
-dfExport$X = ID # increase +1 each time
+dfExport$X = 10 # increase +1 each time
 dfExport = dfExport %>% select(X, chosenVar.final, mae.test.latest.final, mae.train.latest.final, mae.xval.latest.final, nodes, response)
 # dfExport
 
@@ -230,16 +232,18 @@ dfPrior  = read.csv(file.path(outfilePath,"dfExportResultsNO2.csv"),na.strings=c
 dfPrior = dfPrior[2:length(dfPrior)]
 colnames(dfExport) = colnames(dfPrior)
 dfNew    = rbind(dfPrior, dfExport)
-dfNew
+#dfNew
 
 # names(dfExport)
 # names(dfPrior)
-ID = dfExport$X + 1
+#ID = dfExport$X + 1
 
 
 write.csv(dfNew, file.path(outfilePath,'dfExportResultsNO2.csv'))    # # NO2, NO, NOX, O3, PM10, PM2.5, SO2
 
 } 
+
+beep()
 
 
 ```
