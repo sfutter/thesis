@@ -31,9 +31,17 @@ modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS")
 inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
+nodeCount = c(5)
+response        = c('O3') 
 
+for (nodeNum in 1:length(nodeCount)){
 # get data set fields that I can use in the model. 
-df                    = df %>% select( NOX, MMYYYY, Year, Month, Week, Day, TimeHoursNum, BP:WSPD, lag.1.NO:lag.5.WSPD, X5amTo8amSlope.NO2.IMP:min.6.to.8.AM.WSPD.IMP )
+df.temp.predictors = df %>% select(MMYYYY, Year, Month, Week, Day, TimeHoursNum, BP:WSPD, lag.1.NO:lag.5.WSPD, X5amTo8amSlope.NO2.IMP:min.6.to.8.AM.WSPD.IMP )
+includeIdx            = which(names(df) %in% c(response))
+dfResponse            = df[,includeIdx]
+df = cbind(dfResponse, df.temp.predictors)
+colnames(df)[1] = response
+df
 
 # Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
 validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
@@ -41,12 +49,14 @@ nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining 
 
 # split out the non validation data frame into training and test data
 df = nonValidationDf
-```
 
 
 
 
-```{r}
+
+
+
+
 
 createDataFrame = function(df,responseCol,params){
   dfParamsInclude   = which(names(df) %in% c(params))
@@ -65,7 +75,7 @@ mae.xval.latest  = c()
 
 for (i in 1:6){
 
-response        = c('NOX')    # NO, NOX, SO2, PM10, PM2.5  Done: NO2 (0.5, 5, 10)
+##response        = c('O3')    # NO, NOX, SO2, PM10, PM2.5  Done: NO2 (0.5, 5, 10)
 results         = c()
 
 # get data set fields that I can use in the model. 
@@ -115,8 +125,8 @@ test = -train
     
     #nodes_layer1 = ceiling(colcount/2)   # 1
     #nodes_layer1 = 5
-    nodes_layer1 = 10
-    
+    #nodes_layer1 = 10
+    nodes_layer1 = nodeCount[nodeNum]
     df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(nodes_layer1), 
                                    distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
   
@@ -165,16 +175,21 @@ mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
 
 }
 
-chosenVar
-mae.train.latest
-mae.test.latest
-mae.xval.latest
+# chosenVar
+# mae.train.latest
+# mae.test.latest
+# mae.xval.latest
+# nodeCount[nodeNum]
 
-```
 
 
-EXPORT THE MODEL MAE RESULTS TO A CSV
-```{r}
+
+
+
+
+
+
+#EXPORT THE MODEL MAE RESULTS TO A CSV
 # remove the last value as that has the higher MAE
 
 # 
@@ -204,26 +219,27 @@ dfExportResults2 = dfExportResults %>%
 dfExportResults2 = inner_join(dfExportResults, dfExportResults2, by=("X1" = "X1"))
 colnames(dfExportResults2)[length(dfExportResults2)] = 'chosenVar.final'
 dfExport = dfExportResults2 %>% select(chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final) %>% slice(which.min(mae.xval.latest.final))
-dfExport$nodes = c(10) #'ceiling(input var count *0.5)')   #,10,5)
-dfExport$response = c('NOX') #, 'NO', 'NO')
-dfExport$X = c(9) # increase +1 each time
-dfExport = dfExport %>% select(X, chosenVar.final, mae.test.latest.final.y, mae.train.latest.final.y, mae.xval.latest.final.y, nodes, response)
-dfExport
+dfExport$nodes = as.factor(nodeCount[nodeNum]) #'ceiling(input var count *0.5)')   #,10,5)
+dfExport$response = response[1]  # should be O3 now..  #c('NOX') #, 'NO', 'NO')
+dfExport$X = ID # increase +1 each time
+dfExport = dfExport %>% select(X, chosenVar.final, mae.test.latest.final, mae.train.latest.final, mae.xval.latest.final, nodes, response)
+# dfExport
 
 
 dfPrior  = read.csv(file.path(outfilePath,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
 dfPrior = dfPrior[2:length(dfPrior)]
 colnames(dfExport) = colnames(dfPrior)
 dfNew    = rbind(dfPrior, dfExport)
-#dfNew
+dfNew
 
-#names(dfExport)
-#names(dfPrior)
-dfExport$X = dfExport$X + 1
+# names(dfExport)
+# names(dfPrior)
+ID = dfExport$X + 1
 
 
 write.csv(dfNew, file.path(outfilePath,'dfExportResultsNO2.csv'))    # # NO2, NO, NOX, O3, PM10, PM2.5, SO2
 
+} 
 
 
 ```
