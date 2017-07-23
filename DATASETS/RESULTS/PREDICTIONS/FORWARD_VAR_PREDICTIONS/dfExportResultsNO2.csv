@@ -1,1 +1,8 @@
-,chosenVar.y.final,mae.train.latest.final,mae.test.latest.final,mae.xval.latest.final1,"lag.1.NO2, lag.2.NO2",4.702829024,5.128614181,4.8027455832,"lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM",3.626987236,3.924647802,3.737961677
+"","X","chosenVar.final","mae.train.latest.final","mae.test.latest.final","mae.xval.latest.final","nodes","response"
+"1",1,"lag.1.NO2, lag.2.NO2",4.702829024,5.128614181,4.802745583,"ceiling(input var count *0.5)","NO2"
+"2",2,"lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM",3.626987236,3.924647802,3.737961677,"10","NO2"
+"3",3,"lag.1.NO2, lag.2.NO2",4.343356464,4.689486535,4.37524852,"5","NO2"
+"4",4,"lag.1.NO, lag.1.NOX, min.6.to.8.AM.NO.IMP",3.086790136,3.53466159,3.115597636,"10","NO"
+"5",5,"lag.1.NO, X5amTo8amSlope.RHUM.IMP",4.2141592864432,4.58657247476301,4.24904973558443,"ceiling(input var count *0.5)","NO"
+"6",7,"lag.1.NOX, X2amTo5amSlope.RHUM.IMP, Day, lag.3.NOX",8.83592334487259,9.36010535859012,9.10551119272147,"ceiling(input var count *0.5)","NOX"
+"7",8,"lag.1.NOX, lag.2.NOX",8.70028221872997,9.32344336343524,8.8540164404138,"5","NOX"

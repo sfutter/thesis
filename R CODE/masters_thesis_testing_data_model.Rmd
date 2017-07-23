@@ -22,7 +22,6 @@ localH2O = h2o.init(nthreads=-1)
 
 
 ```{r}
-#install.packages('lubridate')
 library(dplyr)
 library(lubridate)
 codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
@@ -34,7 +33,7 @@ df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"
 
 
 # get data set fields that I can use in the model. 
-df                    = df %>% select( NO2, MMYYYY, Year, Month, Week, Day, TimeHoursNum, BP:WSPD, lag.1.NO:lag.5.WSPD, X5amTo8amSlope.NO2.IMP:min.6.to.8.AM.WSPD.IMP )
+df                    = df %>% select( NOX, MMYYYY, Year, Month, Week, Day, TimeHoursNum, BP:WSPD, lag.1.NO:lag.5.WSPD, X5amTo8amSlope.NO2.IMP:min.6.to.8.AM.WSPD.IMP )
 
 # Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
 validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
@@ -66,14 +65,13 @@ mae.xval.latest  = c()
 
 for (i in 1:6){
 
-response        = c('NO2')    # NO, NOX, SO2, PM10, PM2.5
+response        = c('NOX')    # NO, NOX, SO2, PM10, PM2.5  Done: NO2 (0.5, 5, 10)
 results         = c()
 
 # get data set fields that I can use in the model. 
 dropIdx               = which(names(df) %in% c('Year', 'MMYYYY', response, chosenVar)) #chosenVar[length(chosenVar)])) #chosenVar))
 dfPredictors          = df[,-dropIdx]
 predictorVariableList = names(dfPredictors)
-#length(predictorVariableList)
 
 
 # get all values in data frame that are remaining and find all combinations of each --> i changed this to be '1' var added each time so combination no longer needed, but i keep for future ref and change the combination to '1' var.
@@ -107,12 +105,18 @@ test = -train
     # # create h2o-ready frame
     df.train.hex <- as.h2o(df.train)
     df.test.hex <- as.h2o(df.test)
-    # 
-  
-    colcount = dim(df.train.hex)[2]
-    # nodes_layer1 = ceiling(colcount/2)   # 1
-    #nodes_layer1 = 10
-    nodes_layer1 = 5
+     
+    # check on colcount
+    if(j == 1){
+      colcount = 2
+    } else {
+      colcount = dim(df.train.hex)[2]  
+      }
+    
+    #nodes_layer1 = ceiling(colcount/2)   # 1
+    #nodes_layer1 = 5
+    nodes_layer1 = 10
+    
     df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(nodes_layer1), 
                                    distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
   
@@ -165,63 +169,64 @@ chosenVar
 mae.train.latest
 mae.test.latest
 mae.xval.latest
-# 
-# # remove the last value as that has the higher MAE
-# chosenVar.final        = chosenVar[1:length(chosenVar)-1]
-# mae.train.latest.final = mae.train.latest[1:length(mae.train.latest)-1]
-# mae.test.latest.final  = mae.test.latest[1:length(mae.test.latest)-1]
-# mae.xval.latest.final  = mae.xval.latest[1:length(mae.xval.latest)-1]
-# 
-# # Export the data prediction for the testing and validation data sets
-# outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
-# dfExportResults = data.frame(chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final, 1)
-# dfExportResults
-# 
-# # get min mae.xval predictor inputs
-# dfExportResults2 = dfExportResults %>%
-#   group_by(X1) %>%
-#   summarise(chosenVar.final = toString(chosenVar.final)) %>%
-#   ungroup()
-# 
-# dfExportResults2 = inner_join(dfExportResults, dfExportResults2, by=("X1" = "X1"))
-# dfExportResults2
-# 
-# #dfExportResults2 = dfExportResults2 %>% group_by(X1) %>% filter(row_number(mae.train) == 1)
-# #dfExportResults2 = dfExportResults2 %>% select(j, responseCol.x, predictorVar, mae.train, mae.test, mae.xval)
-# #dfExportResults2 = dfExportResults2[,-1]  # remove the 'j'!!
-# 
-# 
-# 
-# # at this point we have a table of values that we can use, but need to select the one var that minimizes the mae.xval
-# dfExport = dfExportResults2 %>% select(chosenVar.final.y, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final) %>% slice(which.min(mae.xval.latest.final))
-# 
-# 
-# dfPrior  = read.csv(file.path(outfilePath,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
-# dfNew    = rbind(dfPrior, dfExport)
-# #dfNew = dfExport
-# write.csv(dfNew, file.path(outfilePath,'dfExportResultsNO2_del.csv')) 
-# 
-# chosenVar
-# mae.xval.latest
-# dfExport
-# 
-# dfPrior
 
-# new values
-# 	chosenVar.final.y	                                                 mae.train.latest.final	mae.test.latest.final	mae.xval.latest.final
-# 1	lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM	3.626987236	3.924647802	3.737961677
-
-
-
-# 1 --> output from model when 1 layer of ceiling(0.5 * input cols) as number of hidden nodes
-# 2 --> output from model when 1 layer of 10 hidden nodes
 ```
 
 
+EXPORT THE MODEL MAE RESULTS TO A CSV
+```{r}
+# remove the last value as that has the higher MAE
+
+# 
+if (length(chosenVar)==2) {
+  chosenVar.final        = chosenVar
+  mae.train.latest.final = mae.train.latest
+  mae.test.latest.final  = mae.test.latest
+  mae.xval.latest.final  = mae.xval.latest
+  } else {
+  chosenVar.final        = chosenVar[1:length(chosenVar)-1]
+  mae.train.latest.final = mae.train.latest[1:length(mae.train.latest)-1]
+  mae.test.latest.final  = mae.test.latest[1:length(mae.test.latest)-1]
+  mae.xval.latest.final  = mae.xval.latest[1:length(mae.xval.latest)-1]
+}
+
+# # Export the data prediction for the testing and validation data sets
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
+dfExportResults = data.frame(chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final, 1)
+dfExportResults
+
+# get min mae.xval predictor inputs
+dfExportResults2 = dfExportResults %>%
+  group_by(X1) %>%
+  summarise(chosenVar.final = toString(chosenVar.final)) %>%
+  ungroup()
+
+dfExportResults2 = inner_join(dfExportResults, dfExportResults2, by=("X1" = "X1"))
+colnames(dfExportResults2)[length(dfExportResults2)] = 'chosenVar.final'
+dfExport = dfExportResults2 %>% select(chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final) %>% slice(which.min(mae.xval.latest.final))
+dfExport$nodes = c(10) #'ceiling(input var count *0.5)')   #,10,5)
+dfExport$response = c('NOX') #, 'NO', 'NO')
+dfExport$X = c(9) # increase +1 each time
+dfExport = dfExport %>% select(X, chosenVar.final, mae.test.latest.final.y, mae.train.latest.final.y, mae.xval.latest.final.y, nodes, response)
+dfExport
+
+
+dfPrior  = read.csv(file.path(outfilePath,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
+dfPrior = dfPrior[2:length(dfPrior)]
+colnames(dfExport) = colnames(dfPrior)
+dfNew    = rbind(dfPrior, dfExport)
+#dfNew
+
+#names(dfExport)
+#names(dfPrior)
+dfExport$X = dfExport$X + 1
+
+
+write.csv(dfNew, file.path(outfilePath,'dfExportResultsNO2.csv'))    # # NO2, NO, NOX, O3, PM10, PM2.5, SO2
 
 
 
-
+```
 
 
 
