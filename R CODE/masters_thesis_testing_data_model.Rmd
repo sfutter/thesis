@@ -33,8 +33,8 @@ modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS")
 inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
  
-nodeCount = c(9) #ceiling(colcount/2),5,10)
-response        = c('NO') 
+nodeCount = c(2,6,7,8,9) #ceiling(colcount/2),5,10)
+response        = c('O3') 
 
 for (nodeNum in 1:length(nodeCount)){
 # get data set fields that I can use in the model. 
