@@ -42,7 +42,7 @@ localH2O = h2o.init(nthreads=-1)
 ```{r}
 library(dplyr)
 library(lubridate)
-codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
 source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
 # This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
@@ -60,8 +60,8 @@ createDataFrameNO2 = function(df,predictor){
 #for (i in 1:1){
 for ( i in 1:length(response)){
   
-modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS") 
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 responseCol = response[i]                 # set first column to the predicted response
@@ -126,7 +126,7 @@ predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
 
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTrain = paste0('greenwich_eltham_',response[i],'_ann_train_1_hr_ahead_final.csv')   # TWO HOURS AHEAD, THREE HOURS, ETC... WILL BE THE NAMES OF THE NEW FILES
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_1_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_1_hr_ahead_final.csv')

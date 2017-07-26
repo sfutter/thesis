@@ -33,8 +33,8 @@ modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS")
 inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
  
-nodeCount = c(2,6,7,8,9) #ceiling(colcount/2),5,10)
-response        = c('O3') 
+nodeCount = c(13) #ceiling(colcount/2),5,10)
+response        = c('NO2') 
 
 for (nodeNum in 1:length(nodeCount)){
 # get data set fields that I can use in the model. 
@@ -53,13 +53,6 @@ nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining 
 df = nonValidationDf
 
 
-
-
-
-
-
-
-
 createDataFrame = function(df,responseCol,params){
   dfParamsInclude   = which(names(df) %in% c(params))
   dfNewParams       = df[,dfParamsInclude]
@@ -75,7 +68,7 @@ mae.train.latest = c()
 mae.test.latest  = c()
 mae.xval.latest  = c()
 
-for (i in 1:6){
+for (i in 1:15){
 
 ##response        = c('O3')    # NO, NOX, SO2, PM10, PM2.5  Done: NO2 (0.5, 5, 10)
 results         = c()
@@ -127,8 +120,8 @@ test = -train
     
     #nodes_layer1 = ceiling(colcount/2)   # 1
     #nodes_layer1 = 5
-    #nodes_layer1 = 10
-    nodes_layer1 = nodeCount[nodeNum]
+    nodes_layer1 = 10
+    #nodes_layer1 = nodeCount[nodeNum]
     df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(nodes_layer1), 
                                    distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
   
@@ -186,11 +179,6 @@ mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
 
 
 
-
-
-
-
-
 #EXPORT THE MODEL MAE RESULTS TO A CSV
 # remove the last value as that has the higher MAE
 
@@ -224,7 +212,7 @@ dfExport = dfExportResults2 %>% select(chosenVar.final, mae.train.latest.final, 
 dfExport$nodes = as.factor(nodeCount[nodeNum]) #'ceiling(input var count *0.5)')   #,10,5)
 dfExport$response = response[1]  # should be O3 now..  #c('NOX') #, 'NO', 'NO')
 dfExport$X = 10 # increase +1 each time
-dfExport = dfExport %>% select(X, chosenVar.final, mae.test.latest.final, mae.train.latest.final, mae.xval.latest.final, nodes, response)
+dfExport = dfExport %>% select(X, chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final, nodes, response)
 # dfExport
 
 
@@ -249,4 +237,37 @@ beep()
 ```
 
 
+INSERT CHART HERE SHOWING HOW MAE DECREASES AS WE ADD NODES!
 
+
+# DRAW PLOTLY OF DAILY PREDICT VS ACTUAL FOR DAYS WHEN OVER 40 ...
+```{r}
+library(plotly)
+f <- list(
+  family = "Courier New, monospace",
+  size = 18,
+  color = "#7f7f7f"
+)
+x <- list(
+  title = "Hour of Day",
+  titlefont = f
+)
+y <- list(
+  title = "Average Hourly NO2",
+  titlefont = f
+)
+
+
+inPathReviewHiddenNodeRes = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
+hiddenNodeRes = read.csv(file.path(inPathReviewHiddenNodeRes,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
+df = hiddenNodeRes %>% filter(response == 'NO2') %>% select(response, nodes, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final)
+df = arrange(df, nodes)
+df
+p <- plot_ly(df, x = ~nodes, y=~mae.xval.latest.final, name = 'Cross-validation MAE', type='scatter', mode='lines+markers') %>%      
+  #add_trace(y = ~predict, name = 'Predicted NO2',mode = 'lines+markers') %>%
+#  add_trace(y = ~euLimit, name = 'EU Limit', line = list(color = 'rgb(205, 12, 24)', width = 4, dash = 'dash')) %>%
+  layout(title = "Cross-Validation MAE as Function of Number of Hidden Nodes", 
+  xaxis = list(title  = "Number of Hidden Nodes"),
+  yaxis = list (title = "Cross-validation MAE (NO2)"))
+p
+```
