@@ -33,7 +33,7 @@ modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS")
 inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
  
-#nodeCount = c(13) #ceiling(colcount/2),5,10) #search on
+nodeCount = c(2) #ceiling(colcount/2),5,10) #search on
 response        = c('NO2') 
 
 for (nodeNum in 1:length(nodeCount)){
@@ -120,10 +120,11 @@ test = -train
     
     #nodes_layer1 = ceiling(colcount/2)   # 1
     #nodes_layer1 = 5
-    nodes_layer1 = 10
-    #nodes_layer1 = nodeCount[nodeNum]
+    #nodes_layer1 = 10
+    nodes_layer1 = nodeCount[nodeNum]
+    modelID = paste0("colcount.",colcount,".j.",j,"variable.count.",i,".",response,".dl")
     df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(nodes_layer1), 
-                                   distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10) 
+                                   distribution= "AUTO", variable_importances = TRUE, reproducible = TRUE, seed = 1234, nfolds=10, model_id = modelID) 
   
     mae.train = h2o.mae(df.train.dl, train = TRUE,  valid = FALSE, xval=FALSE)
     mae.test  = h2o.mae(df.train.dl, train = FALSE, valid = TRUE,  xval=FALSE)
@@ -135,7 +136,13 @@ test = -train
   
     results.temp = data.frame(responseCol, j, inputVarCol, mae.train, mae.test, mae.xval)  #
     results = rbind(results, results.temp)
+
+    # save the 'best' model
+    model_path  <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/",response[1],".dl.","hidden.layers.",nodes_layer1,".colcount.",i,".j.loop.",j) 
+    # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
   
+    # Save the model
+    h2o.saveModel(object=df.train.dl, path=model_path, force=TRUE)  
   
     }
 
@@ -143,7 +150,6 @@ test = -train
   }
 
 # note - had to re-do results since the adding of results to the last results table doesnt work for the 'toString' section.
-#results = results[129:382,]
 x = results %>%
   group_by(responseCol, j) %>%
   summarise(predictorVar = toString(inputVarCol)) %>%
@@ -161,22 +167,11 @@ y = y %>% select(responseCol.x, predictorVar, mae.train, mae.test, mae.xval) %>%
 # variable 1 selected for predicting NO2 is lag.1.NO2. No surprises there. The mae.xval is 4.544425 
 # variable 2 selected for predicting NO2 is the lag.1.SOLR.                The mae.xval is 4.360116
 # variable 3 selected for predicting NO2 is the lag.2.NO2.                 The mae.xval is 4.259163
-addPredictorVar = unlist(strsplit(y$predictorVar, split=", "))
-chosenVar       = append(chosenVar, addPredictorVar[length(addPredictorVar)]) #y$predictorVar)
+addPredictorVar  = unlist(strsplit(y$predictorVar, split=", "))
+chosenVar        = append(chosenVar, addPredictorVar[length(addPredictorVar)]) #y$predictorVar)
 mae.train.latest = append(mae.train.latest,min(y$mae.train))
-mae.test.latest = append(mae.test.latest,min(y$mae.test))
-mae.xval.latest = append(mae.xval.latest,min(y$mae.xval))
-
-   
-# save the 'best' model
-model_path  <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/",response[1],".dl.","hidden.layers.",nodes_layer1,"colcount.",i) 
-# saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
-
-# Save the model
-h2o.saveModel(object=df.train.dl, path=model_path, force=TRUE)
-# print(model_path)
-# /tmp/mymodel/DeepLearning_model_R_1441838096933
-    
+mae.test.latest  = append(mae.test.latest,min(y$mae.test))
+mae.xval.latest  = append(mae.xval.latest,min(y$mae.xval))
 
 }
 
@@ -223,19 +218,12 @@ dfExport$nodes = as.factor(nodeCount[nodeNum]) #'ceiling(input var count *0.5)')
 dfExport$response = response[1]  # should be O3 now..  #c('NOX') #, 'NO', 'NO')
 dfExport$X = 10 # increase +1 each time
 dfExport = dfExport %>% select(X, chosenVar.final, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final, nodes, response)
-# dfExport
 
 
 dfPrior  = read.csv(file.path(outfilePath,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
 dfPrior = dfPrior[2:length(dfPrior)]
 colnames(dfExport) = colnames(dfPrior)
 dfNew    = rbind(dfPrior, dfExport)
-#dfNew
-
-# names(dfExport)
-# names(dfPrior)
-#ID = dfExport$X + 1
-
 
 write.csv(dfNew, file.path(outfilePath,'dfExportResultsNO2.csv'))    # # NO2, NO, NOX, O3, PM10, PM2.5, SO2
 
@@ -244,7 +232,141 @@ write.csv(dfNew, file.path(outfilePath,'dfExportResultsNO2.csv'))    # # NO2, NO
 beep()
 
 
+# 
+# h2o.mae(df.train.dl, train = TRUE, valid = FALSE, xval=FALSE)
+# h2o.mae(df.train.dl, train = FALSE, valid = TRUE, xval=FALSE)
+# h2o.mae(df.train.dl, train = FALSE, valid = FALSE, xval=TRUE)
+# df.train.dl
+# 
+# chosenVar
+# mae.train.latest
+# mae.test.latest
+# mae.xval.latest
+# nodeCount[nodeNum]
+# 
+# df.train.dl
+
 ```
+
+
+
+
+
+# NEED TO LOOP THROUGH TO GET THE 
+# TAKE 2 AT GETTING THE SAVED MODEL MAE VALUES ALONG WITH THEIR VALUES
+```{r}
+
+mae.train  = c()
+mae.test   = c()
+mae.xval   = c()
+model.min  = c()
+vars = c()
+
+for (i in 17:17){
+  model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.2.colcount.2.j.loop.",i,"/colcount.3.j.",i,"variable.count.2.NO2.dl")
+  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # h2o.varimp(saved_model)[1]
+  mae.train.new = h2o.mae(saved_model, train = TRUE,   valid = FALSE, xval=FALSE)
+  mae.test.new  = h2o.mae(saved_model, train = FALSE,  valid = TRUE,  xval=FALSE)
+  mae.xval.new  = h2o.mae(saved_model, train = FALSE,  valid = FALSE, xval=TRUE)
+  
+  mae.train = append(mae.train, mae.train.new)
+  mae.test  = append(mae.test,  mae.test.new)
+  mae.xval  = append(mae.xval,  mae.xval.new)
+  
+  model.min = append(model.min, i)
+
+}
+
+temp = data.frame(mae.train, mae.test, mae.xval, model.min)
+temp %>% slice(which.min(mae.xval))
+temp
+
+
+
+```
+
+
+### DELETE THIS SECTION ONCE FIGURED OUT HOW TO GET AT MIN MAE XVAL MODEL!!!
+```{r}
+library(dplyr)
+library(lubridate)
+codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
+
+# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
+response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')    
+
+# best.model.vars = ['NO2','Year','Time','lag.1.NO2', 'lag.2.NO2', 'X5amTo8amSlope.NOX.IMP', 'TimeHoursNum', 'RHUM']
+
+createDataFrameNO2 = function(df,predictor){
+  dfNew = df %>% select(NO2, Year, Time, lag.1.NO2, lag.2.NO2) 
+  return(dfNew)
+}
+
+
+
+#for (i in 1:1){
+for ( i in 1:length(response)){
+  
+modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS") 
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+
+responseCol = response[i]                 # set first column to the predicted response
+df = createDataFrameNO2(df, responseCol)     # lags 1-3, current hour meteo, slopes for prior 8am.
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# split out the data 70-30
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+# rename the df to df.train, df.test, and df.vali respectively
+df.train.temp = df[train,]
+df.test.temp  = df[-train,]
+df.vali.temp = validationDf
+
+# remove year now that validation set has been removed
+df.train.time = as.h2o(df.train.temp$Time)
+df.test.time  = as.h2o(df.test.temp$Time)
+df.vali.time  = as.h2o(df.vali.temp$Time)
+
+df.train = df.train.temp %>% select(-Year, -Time)
+df.test  = df.test.temp  %>% select(-Year, -Time)
+df.vali  = df.vali.temp  %>% select(-Year, -Time)
+
+
+# Train ANN then calculate train / test MSE
+########################################################################
+# MODEL 1: ANN that uses half as many hidden nodes as variable inputs. 
+########################################################################
+#library(h2o) # ONLY NEED ON FIRST RUN THROUGH
+#h2o.init()   # ONLY NEED ON FIRST RUN THROUGH
+df.train.hex <- as.h2o(df.train)
+df.test.hex  <- as.h2o(df.test)
+df.vali.hex  <- as.h2o(df.vali)
+
+# Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
+colcount    = dim(df.train.hex)[2]
+hiddencount = 2  # need to run the neural network with half as many hidden nodes as input nodes
+modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
+df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
+                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10)
+summary(df.train.dl)
+
+}
+```
+
+
+
 
 
 INSERT CHART HERE SHOWING HOW MAE DECREASES AS WE ADD NODES!

@@ -5,6 +5,21 @@ date: "5/30/2017"
 output: html_document
 ---
 
+```{r}
+model_path <- "~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10colcount.5/DeepLearning_model_R_1501334667028_1468"
+#model_path <- "~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10colcount.6/DeepLearning_model_R_1501334667028_1596"
+saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+saved_model
+
+
+# 3.886827, 4.240812
+ mae.train = h2o.mae(saved_model, train = TRUE,  valid = FALSE, xval=FALSE)
+mae.test  = h2o.mae(saved_model, train = FALSE, valid = TRUE,  xval=FALSE)
+h2o.mae(saved_model, train = FALSE, valid = FALSE,  xval=TRUE)
+
+```
+
+
 # MODEL 3: ANN using H2O - multinomial classification
 http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/index.html
 Useful tutorial: https://github.com/h2oa i/h2o-tutorials/tree/master/tutorials/deeplearning
