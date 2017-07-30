@@ -33,7 +33,7 @@ modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS")
 inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
  
-nodeCount = c(2) #ceiling(colcount/2),5,10) #search on
+nodeCount = c(11) #ceiling(colcount/2),5,10) #search on
 response        = c('NO2') 
 
 for (nodeNum in 1:length(nodeCount)){
@@ -43,7 +43,7 @@ includeIdx            = which(names(df) %in% c(response))
 dfResponse            = df[,includeIdx]
 df = cbind(dfResponse, df.temp.predictors)
 colnames(df)[1] = response
-df
+#df
 
 # Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
 validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
@@ -251,9 +251,11 @@ beep()
 
 
 
+################################################################################################################################################
+######### THE MODEL LOADED HERE PROVIDES THE MIN MAE VALUE OF 3.781917 --- it can be loaded from the file path:                          #######
+######### "~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl"    #######
+################################################################################################################################################
 
-# NEED TO LOOP THROUGH TO GET THE 
-# TAKE 2 AT GETTING THE SAVED MODEL MAE VALUES ALONG WITH THEIR VALUES
 ```{r}
 
 mae.train  = c()
@@ -262,10 +264,10 @@ mae.xval   = c()
 model.min  = c()
 vars = c()
 
-for (i in 17:17){
-  model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.2.colcount.2.j.loop.",i,"/colcount.3.j.",i,"variable.count.2.NO2.dl")
+for (i in 3:3){
+  model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.11.colcount.8.j.loop.",i,"/colcount.9.j.",i,"variable.count.8.NO2.dl")
   saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
-  # h2o.varimp(saved_model)[1]
+  
   mae.train.new = h2o.mae(saved_model, train = TRUE,   valid = FALSE, xval=FALSE)
   mae.test.new  = h2o.mae(saved_model, train = FALSE,  valid = TRUE,  xval=FALSE)
   mae.xval.new  = h2o.mae(saved_model, train = FALSE,  valid = FALSE, xval=TRUE)
@@ -279,99 +281,17 @@ for (i in 17:17){
 }
 
 temp = data.frame(mae.train, mae.test, mae.xval, model.min)
-temp %>% slice(which.min(mae.xval))
+temp = temp %>% slice(which.min(mae.xval))
 temp
 
+h2o.varimp(saved_model)[1]
 
 
 ```
 
 
-### DELETE THIS SECTION ONCE FIGURED OUT HOW TO GET AT MIN MAE XVAL MODEL!!!
-```{r}
-library(dplyr)
-library(lubridate)
-codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
-source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
-# This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
-response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')    
-
-# best.model.vars = ['NO2','Year','Time','lag.1.NO2', 'lag.2.NO2', 'X5amTo8amSlope.NOX.IMP', 'TimeHoursNum', 'RHUM']
-
-createDataFrameNO2 = function(df,predictor){
-  dfNew = df %>% select(NO2, Year, Time, lag.1.NO2, lag.2.NO2) 
-  return(dfNew)
-}
-
-
-
-#for (i in 1:1){
-for ( i in 1:length(response)){
-  
-modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS") 
-inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
-df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
-
-responseCol = response[i]                 # set first column to the predicted response
-df = createDataFrameNO2(df, responseCol)     # lags 1-3, current hour meteo, slopes for prior 8am.
-
-# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
-validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
-nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
-
-# split out the non validation data frame into training and test data
-df = nonValidationDf
-
-# split out the data 70-30
-set.seed(123)
-smp.size = floor(0.70 * nrow(df))
-train = sample(seq_len(nrow(df)), size = smp.size)
-test = -train
-
-# rename the df to df.train, df.test, and df.vali respectively
-df.train.temp = df[train,]
-df.test.temp  = df[-train,]
-df.vali.temp = validationDf
-
-# remove year now that validation set has been removed
-df.train.time = as.h2o(df.train.temp$Time)
-df.test.time  = as.h2o(df.test.temp$Time)
-df.vali.time  = as.h2o(df.vali.temp$Time)
-
-df.train = df.train.temp %>% select(-Year, -Time)
-df.test  = df.test.temp  %>% select(-Year, -Time)
-df.vali  = df.vali.temp  %>% select(-Year, -Time)
-
-
-# Train ANN then calculate train / test MSE
-########################################################################
-# MODEL 1: ANN that uses half as many hidden nodes as variable inputs. 
-########################################################################
-#library(h2o) # ONLY NEED ON FIRST RUN THROUGH
-#h2o.init()   # ONLY NEED ON FIRST RUN THROUGH
-df.train.hex <- as.h2o(df.train)
-df.test.hex  <- as.h2o(df.test)
-df.vali.hex  <- as.h2o(df.vali)
-
-# Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
-colcount    = dim(df.train.hex)[2]
-hiddencount = 2  # need to run the neural network with half as many hidden nodes as input nodes
-modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
-df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
-                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10)
-summary(df.train.dl)
-
-}
-```
-
-
-
-
-
-INSERT CHART HERE SHOWING HOW MAE DECREASES AS WE ADD NODES!
-
-
+# SHOW HOW MAE DECREASES AS WE ADD NODES and introduce complexity to the model
 # DRAW PLOTLY OF DAILY PREDICT VS ACTUAL FOR DAYS WHEN OVER 40 ...
 ```{r}
 library(plotly)
@@ -389,17 +309,25 @@ y <- list(
   titlefont = f
 )
 
+response       = rep('NO2',10)
+hidden.nodes   = seq(2,11)
+training.mae   = c(4.821469,4.602355,4.369596,4.396497,3.918334,3.992214,3.758418,3.73644,3.657878, 3.600278)
+testing.mae    = c(5.210384,4.961784,4.792736,4.659635,4.2216,4.312087,3.943851,4.090318,4.103943, 3.833438)
+validation.mae = c(4.97703,4.745276,4.584833,4.481203,4.075095,4.056564,3.929777,3.872554,3.781917, 3.815724)
 
-inPathReviewHiddenNodeRes = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
-hiddenNodeRes = read.csv(file.path(inPathReviewHiddenNodeRes,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
-df = hiddenNodeRes %>% filter(response == 'NO2') %>% select(response, nodes, mae.train.latest.final, mae.test.latest.final, mae.xval.latest.final)
-df = arrange(df, nodes)
+#inPathReviewHiddenNodeRes = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","FORWARD_VAR_PREDICTIONS")
+#hiddenNodeRes = read.csv(file.path(inPathReviewHiddenNodeRes,"dfExportResultsNO2.csv"),na.strings=c("NA"," "))
+hiddenNodeRes = data.frame(response, hidden.nodes, training.mae, testing.mae, validation.mae)
+df = hiddenNodeRes %>% filter(response == 'NO2') %>% select(response, hidden.nodes, training.mae, testing.mae, validation.mae)
+df = arrange(df, hidden.nodes)
 df
-p <- plot_ly(df, x = ~nodes, y=~mae.xval.latest.final, name = 'Cross-validation MAE', type='scatter', mode='lines+markers') %>%      
-  #add_trace(y = ~predict, name = 'Predicted NO2',mode = 'lines+markers') %>%
-#  add_trace(y = ~euLimit, name = 'EU Limit', line = list(color = 'rgb(205, 12, 24)', width = 4, dash = 'dash')) %>%
-  layout(title = "Cross-Validation MAE as Function of Number of Hidden Nodes", 
+
+p <- plot_ly(df, x = ~hidden.nodes, y=~validation.mae, name = 'Cross-validation MAE', type='scatter', mode='lines+markers') %>%      
+  add_trace(y = ~training.mae, name = 'Training MAE',mode = 'lines+markers') %>%
+  # add_trace(y = ~euLimit, name = 'Testing MAE', line = list(color = 'rgb(205, 12, 24)', width = 4, dash = 'dash')) %>%
+  add_trace(y = ~testing.mae, name = 'Testing MAE', mode = 'line+markers') %>%
+  layout(title = "Train, Test, and Validation MAE as Function of Number of Hidden Nodes", 
   xaxis = list(title  = "Number of Hidden Nodes"),
-  yaxis = list (title = "Cross-validation MAE (NO2)"))
+  yaxis = list (title = "MAE (NO2)"))
 p
 ```

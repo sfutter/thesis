@@ -5,20 +5,6 @@ date: "5/30/2017"
 output: html_document
 ---
 
-```{r}
-model_path <- "~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10colcount.5/DeepLearning_model_R_1501334667028_1468"
-#model_path <- "~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10colcount.6/DeepLearning_model_R_1501334667028_1596"
-saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
-saved_model
-
-
-# 3.886827, 4.240812
- mae.train = h2o.mae(saved_model, train = TRUE,  valid = FALSE, xval=FALSE)
-mae.test  = h2o.mae(saved_model, train = FALSE, valid = TRUE,  xval=FALSE)
-h2o.mae(saved_model, train = FALSE, valid = FALSE,  xval=TRUE)
-
-```
-
 
 # MODEL 3: ANN using H2O - multinomial classification
 http://h2o-release.s3.amazonaws.com/h2o/rel-tverberg/5/index.html
@@ -66,7 +52,7 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')
 # best.model.vars = ['NO2','Year','Time','lag.1.NO2', 'lag.2.NO2', 'X5amTo8amSlope.NOX.IMP', 'TimeHoursNum', 'RHUM']
 
 createDataFrameNO2 = function(df,predictor){
-  dfNew = df %>% select(NO2, Year, Time, lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM)     
+  dfNew = df %>% select(NO2, Year, Time, lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM, lag.4.NOX)     
   return(dfNew)
 }
 
@@ -120,25 +106,42 @@ df.train.hex <- as.h2o(df.train)
 df.test.hex  <- as.h2o(df.test)
 df.vali.hex  <- as.h2o(df.vali)
 
-# Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
-colcount    = dim(df.train.hex)[2]
-hiddencount = 10  # need to run the neural network with half as many hidden nodes as input nodes
-modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
-df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
-                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10)
-# summary(df.train.dl)
+# # Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
+# colcount    = dim(df.train.hex)[2]
+# hiddencount = 10  # need to run the neural network with half as many hidden nodes as input nodes
+# modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
+# df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
+#                                 distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10)
+# # summary(df.train.dl)
 
-# Save the model
-model_path <- h2o.saveModel(object=df.train.dl, path=modelPath, force=TRUE)
-# print(model_path)
-# /tmp/mymodel/DeepLearning_model_R_1441838096933
+
+# Pull in previously trained data frame
+
+################################################################################################################################################
+######### THE MODEL LOADED HERE PROVIDES THE MIN MAE VALUE OF 3.781917 --- it can be loaded from the file path:                          #######
+######### "~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl"    #######
+################################################################################################################################################
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)    
+
+
+
+## Save the model
+#model_path <- h2o.saveModel(object=df.train.dl, path=modelPath, force=TRUE)
+## print(model_path)
+## /tmp/mymodel/DeepLearning_model_R_1441838096933
 
 # make a prediction here for train, test, validation set response
-predictions.train <- h2o.predict(df.train.dl, df.train.hex)
-predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
-predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
+#predictions.train <- h2o.predict(df.train.dl, df.train.hex)
+#predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
+#predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
 
+predictions.train <- h2o.predict(saved_model, df.train.hex)
+predictions.test  <- h2o.predict(saved_model, df.test.hex)
+predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
+#saved_model
 
 # Export the data prediction for the testing and validation data sets
 outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
@@ -186,6 +189,8 @@ colnames(dfExportVali)[1] = 'Time'
 write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we have exported a validation file containing ALL the 9am predictions for ALL pollutant/meteo vars
 
 }
+
+
 ```
 
 
@@ -203,7 +208,7 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we ha
 ```{r}
 library(dplyr)
 library(lubridate)
-codePath = file.path("~/Dropbox","NU","THESIS","R CODE")
+codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
 source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
 
 # This loop through is needed for prediction hours after 9AM .. i.e. 10am to 4pm
@@ -211,15 +216,16 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')
 
 # best.model.vars = ['NO2','Year','Time','lag.1.NO2', 'lag.2.NO2', 'X5amTo8amSlope.NOX.IMP', 'TimeHoursNum', 'RHUM']
 createDataFrameNO2 = function(df,predictor){
-  dfNew = df %>% select(NO2, Year, Time, lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM)     
+  dfNew = df %>% select(NO2, Year, Time, lag.1.NO2, lag.2.NO2, X5amTo8amSlope.NOX.IMP, TimeHoursNum, RHUM, lag.4.NOX)     
   return(dfNew)
 }
+
 
 #for (i in 1:1){
 for ( i in 1:length(response)){
   
-modelPath = file.path("~/Dropbox","NU","THESIS","MODELS") 
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS") 
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 responseCol = response[i]                       # set first column to the predicted response
@@ -263,28 +269,32 @@ df.train.hex <- as.h2o(df.train)
 df.test.hex  <- as.h2o(df.test)
 df.vali.hex  <- as.h2o(df.vali)
 
-# Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
-colcount    = dim(df.train.hex)[2]
-hiddencount = 10  # need to run the neural network with half as many hidden nodes as input nodes
-modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
-df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
-                                distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10)
-# summary(df.train.dl)
+# # Rule of thumb that the hidden nodes should be half as many columns (to begin with) -- later we will try other rules here for the number of hidden nodes
+# colcount    = dim(df.train.hex)[2]
+# hiddencount = 10  # need to run the neural network with half as many hidden nodes as input nodes
+# modelID = paste0(response[i],'.dl')          # creates unique model id for each variable!
+# df.train.dl <- h2o.deeplearning(x = 2:colcount, y = 1, training_frame = df.train.hex, validation_frame= df.test.hex, hidden=c(hiddencount), 
+#                                 distribution= "AUTO", variable_importances = TRUE, model_id = modelID, reproducible = TRUE, seed = 1234, nfolds=10)
+# # summary(df.train.dl)
 
 # Save the model
-model_path <- h2o.saveModel(object=df.train.dl, path=modelPath, force=TRUE)
-# print(model_path)
-# /tmp/mymodel/DeepLearning_model_R_1441838096933
+# model_path <- h2o.saveModel(object=df.train.dl, path=modelPath, force=TRUE)
+# # print(model_path)
+# # /tmp/mymodel/DeepLearning_model_R_1441838096933
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)    
+
 
 # make a prediction here for train, test, validation set response
-predictions.train <- h2o.predict(df.train.dl, df.train.hex)
-predictions.test  <- h2o.predict(df.train.dl, df.test.hex)
-predictions.vali  <- h2o.predict(df.train.dl, df.vali.hex)
+predictions.train <- h2o.predict(saved_model, df.train.hex)
+predictions.test  <- h2o.predict(saved_model, df.test.hex)
+predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTrain = paste0('greenwich_eltham_',response[i],'_ann_train_1_hr_ahead_final.csv')   # TWO HOURS AHEAD, THREE HOURS, ETC... WILL BE THE NAMES OF THE NEW FILES
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_1_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_1_hr_ahead_final.csv')
@@ -353,12 +363,13 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
-
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -435,7 +446,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_2_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_2_hr_ahead_final.csv')
 
@@ -487,12 +498,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -582,7 +596,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_3_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_3_hr_ahead_final.csv')
 
@@ -634,12 +648,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -738,7 +755,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_4_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_4_hr_ahead_final.csv')
 
@@ -786,12 +803,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -898,7 +918,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_5_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_5_hr_ahead_final.csv')
 
@@ -949,12 +969,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1070,7 +1093,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_6_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_6_hr_ahead_final.csv')
 
@@ -1117,12 +1140,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1239,7 +1265,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_7_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_7_hr_ahead_final.csv')
 
@@ -1287,12 +1313,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2') #, 'BP', 'R
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1409,7 +1438,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest  = paste0('greenwich_eltham_',response[i],'_ann_test_8_hr_ahead_final.csv')
 filenameVali  = paste0('greenwich_eltham_',response[i],'_ann_vali_8_hr_ahead_final.csv')
 
@@ -1482,12 +1511,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1553,7 +1585,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_5_hr_ahead_reset_13_final.csv')
 filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_5_hr_ahead_reset_13_final.csv')
 
@@ -1601,12 +1633,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1676,7 +1711,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_6_hr_ahead_reset_13_final.csv')
 filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_6_hr_ahead_reset_13_final.csv')
 
@@ -1722,12 +1757,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1809,7 +1847,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_7_hr_ahead_reset_13_final.csv')
 filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_7_hr_ahead_reset_13_final.csv')
 
@@ -1853,12 +1891,15 @@ response    = c('NO2') #, 'NO', 'NOX', 'O3', 'PM10', 'PM2.5', 'SO2')
 # LOAD SAVED MODEL From Step 1 ABOVE #
 ########################################
 for (i in 1:length(response)) {   # 1 is NO2. 
-  model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
-  saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+  # model_path  <- paste0("/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/",response[i],".dl") 
+  # saved_model <- h2o.loadModel(model_path)    # "/Users/stevenfutter/Dropbox/NU/THESIS/R CODE/~/Dropbox/NU/THESIS/MODELS/no2.dl"
+
+model_path <- paste0("~/Dropbox/NU/THESIS_MAC/thesis/MODELS/NO2.dl.hidden.layers.10.colcount.6.j.loop.21/colcount.7.j.21variable.count.6.NO2.dl")
+saved_model <- h2o.loadModel(model_path)  
 
 
 # Load test data frame
-inPath = file.path("~/Dropbox","NU","THESIS","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
 df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
 
 # Set response column and recreate test/vali data frames
@@ -1951,7 +1992,7 @@ predictions.test  <- h2o.predict(saved_model, df.test.hex)
 predictions.vali  <- h2o.predict(saved_model, df.vali.hex)
 
 # Export the data prediction for the testing and validation data sets
-outfilePath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+outfilePath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 filenameTest = paste0('greenwich_eltham_',response[i],'_ann_test_8_hr_ahead_reset_13_final.csv')
 filenameVali = paste0('greenwich_eltham_',response[i],'_ann_vali_8_hr_ahead_reset_13_final.csv')
 
@@ -1984,3 +2025,5 @@ write.csv(dfExportVali, file.path(outfilePath,filenameVali))    # to here: we ha
 }
 
 ```
+
+

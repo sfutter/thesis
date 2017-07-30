@@ -1,9 +1,9 @@
 
 # TEST SET
-# 1. ONE-HOUR AHEAD
+# 1. ONE-HOUR AHEAD for 8 hours in day
 ```{r}
 
-infilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+infilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 df         = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_test_1_hr_ahead_final.csv"),na.strings=c("NA"," "))
 dfNew      = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_test_2_hr_ahead_final.csv"),na.strings=c("NA"," "))
 df = rbind(df, dfNew)
@@ -59,13 +59,44 @@ paste0('Overall accuractely predict NO2: ',round(overall_accuracy,3))
 
 ```
 
+<!-- # TEST DATA: MAE BY HOUR OF DAY (8 hour ahead) -->
+
+<!-- ```{r} -->
+<!-- df -->
+
+<!-- (x <- strptime(df$TimeKey1, format="%d/%m/%Y %H:%M"))          # Strip time from date -->
+<!-- df2$TimeHours = format(x,"%H:%M") -->
+
+<!-- df2$TimeHoursNum = sapply(strsplit(df2$TimeHours,":"),       # function to convert character time hours:sec into numeric -->
+<!--   function(x) { -->
+<!--     x <- as.numeric(x) -->
+<!--     x[1]+x[2]/60 -->
+<!--     } -->
+<!-- ) -->
+
+<!-- # CALC the MAE here -->
+<!-- # TESTING: evaluate the quality of the prediction using the test data set: -->
+<!-- df.test.mae = mean(abs(df$predict-df$NO2)) -->
+<!-- df.test.mae          # 4.92347 NO2 (w.out min/max) -> 4.980155 NO2 (w min/max) -> 4.178306 latest 10 node model! -->
+
+<!-- df.Xam.mae.output = c() -->
+<!-- for (hour in 9:16){ -->
+<!--  df.Xam     = df %>% filter(TimeHoursNum==hour) -->
+<!--  df.Xam.mae = mean(abs(df.Xam$predict-df.Xam$NO2)) -->
+<!--  df.Xam.mae.output = append(df.Xam.mae.output, df.Xam.mae) -->
+<!-- } -->
+
+<!-- df.Xam.mae.output -->
+<!-- mean(df.Xam.mae.output) -->
+
+<!-- ``` -->
 
 # VALI SET
 # 1. LAGS 1-3, CURRENT METEO, SLOPES PRIOR 8AM
 # MAE & RESULTS TABLE FOR VALIDATION
 ```{r}
 # REPEAT FOR VALIDATION DATA SET
-infilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+infilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 df         = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_vali_1_hr_ahead_final.csv"),na.strings=c("NA"," "))
 dfNew      = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_vali_2_hr_ahead_final.csv"),na.strings=c("NA"," "))
 df = rbind(df, dfNew)

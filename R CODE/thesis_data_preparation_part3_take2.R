@@ -155,7 +155,7 @@ createDataFrame = function(df,predictor){
 # FUNCTION THAT REPLACES ACTUAL-LAG-1 WITH PREDICTED-LAG-1
 ############################################################################
 updateDF_tMinus1Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+  inPath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
   inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
   inFile = inFile %>% select(predict, TimeKey1)  # note that the TimeKey for the 9AM prdiction will be 10AM... 
   
@@ -172,7 +172,7 @@ updateDF_tMinus1Lags = function(df, lagPredictor, infile){
 
 # FOR 11AM TIMEKEY1 IN THE 10AM PREDICT FILE IS 1-HOUR LAG. FOR 11AM TIMEKEY2 IN THE 9AM PREDICT FILE IS THE 2-HOUR LAG.
 updateDF_tMinus2Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+  inPath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
   inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
   inFile = inFile %>% select(predict, TimeKey2)  # note that the TimeKey for the 11AM prdiction will be 9AM TIMEKEY2!
   
@@ -188,7 +188,7 @@ updateDF_tMinus2Lags = function(df, lagPredictor, infile){
 
 
 updateDF_tMinus3Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+  inPath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
   inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
   inFile = inFile %>% select(predict, TimeKey3)  
   
@@ -205,7 +205,7 @@ updateDF_tMinus3Lags = function(df, lagPredictor, infile){
 
 
 updateDF_tMinus4Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+  inPath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
   inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
   inFile = inFile %>% select(predict, TimeKey4)  
   
@@ -221,7 +221,7 @@ updateDF_tMinus4Lags = function(df, lagPredictor, infile){
 
 
 updateDF_tMinus5Lags = function(df, lagPredictor, infile){
-  inPath  = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+  inPath  = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
   inFile = read.csv(file.path(inPath,infile),na.strings=c("NA"," "))
   inFile = inFile %>% select(predict, TimeKey5)  
   

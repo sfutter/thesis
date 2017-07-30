@@ -5,7 +5,7 @@
 
 # 4-HOUR AHEAD
 ```{r}
-infilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+infilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 df         = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_test_1_hr_ahead_final.csv"),na.strings=c("NA"," "))
 dfNew      = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_test_2_hr_ahead_final.csv"),na.strings=c("NA"," "))
 df = rbind(df, dfNew)
@@ -60,7 +60,7 @@ paste0('Inaccurately predict NO2 below 40: ',round(inaccurate_pred_below_40,3))
 # MAE & RESULTS TABLE FOR VALIDATION
 ```{r}
 # REPEAT FOR VALIDATION DATA SET
-infilePath = file.path("~/Dropbox","NU","THESIS","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
+infilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 df         = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_vali_1_hr_ahead_final.csv"),na.strings=c("NA"," "))
 dfNew      = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_vali_2_hr_ahead_final.csv"),na.strings=c("NA"," "))
 df = rbind(df, dfNew)
