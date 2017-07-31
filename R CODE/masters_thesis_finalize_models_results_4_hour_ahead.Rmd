@@ -5,6 +5,7 @@
 
 # 4-HOUR AHEAD
 ```{r}
+library(dplyr)
 infilePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","RESULTS", "PREDICTIONS","ONE_HOUR_AHEAD_PREDICTIONS")
 df         = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_test_1_hr_ahead_final.csv"),na.strings=c("NA"," "))
 dfNew      = read.csv(file.path(infilePath,"greenwich_eltham_NO2_ann_test_2_hr_ahead_final.csv"),na.strings=c("NA"," "))
