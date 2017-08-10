@@ -1,0 +1,228 @@
+---
+title: "Thesis Data Modeling"
+author: "Steven Futter"
+date: "4/1/2017"
+output: html_document
+---
+
+What am I trying to achieve here? 
+There are two problems I am trying to solve: 
+1. 8-hour ahead pollution prediction (regression) or **how many hours ahead we can we accurately predict pollution?**
+2. whether or not a particular hour in each day will breach the EU recommended limits (classification)  
+
+# STEPWISE LINEAR REGRESSION STRAW-MODEL (LYND FEEDBACK)
+```{r}
+library(beepr)
+library(dplyr)
+library(lubridate)
+#codePath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","R CODE")
+codePath = file.path("~/Documents","MyRepos","thesis","R CODE")
+source(file.path(codePath,"thesis_data_preparation_part3_take2.R"))
+
+#modelPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","MODELS") 
+modelPath = file.path("~/Documents","MyRepos","thesis","MODELS") 
+# inPath = file.path("~/Dropbox","NU","THESIS_MAC","thesis","DATASETS","GROOMED") # Home path
+inPath = file.path("~/Documents","MyRepos","thesis","DATASETS","GROOMED") # Home path
+
+df = read.csv(file.path(inPath,"greenwich_eltham_imputed_school_hours_take2.csv"),na.strings=c("NA"," "))
+ 
+response        = c('NO2') 
+
+# get data set fields that I can use in the model. 
+df.temp.predictors = df %>% select(MMYYYY, Year, Month, Week, Day, TimeHoursNum, BP:WSPD, lag.1.NO:lag.5.WSPD, X5amTo8amSlope.NO2.IMP:min.6.to.8.AM.WSPD.IMP )
+includeIdx            = which(names(df) %in% c(response))
+dfResponse            = df[,includeIdx]
+df = cbind(dfResponse, df.temp.predictors)
+colnames(df)[1] = response
+# df
+
+# Prep the testing data using 70-20-10 split. End up taking 12.5% for the validation set. This is data that is collected after Jan 2014. 
+validationDf    = df %>% filter(Year >= 2014)    # First -- set aside the validation data - i.e. dates/hours after jan 2014
+nonValidationDf = df %>% filter(Year  < 2014)  # Second -- divide the remaining df between training and testing using an 80-20 split
+
+# split out the non validation data frame into training and test data
+df = nonValidationDf
+
+# get data set fields that I can use in the model. 
+dropIdx               = which(names(df) %in% c('Year', 'MMYYYY', response)) #chosenVar[length(chosenVar)])) #chosenVar))
+dfPredictors          = df[,-dropIdx]
+
+set.seed(123)
+smp.size = floor(0.70 * nrow(df))
+train = sample(seq_len(nrow(df)), size = smp.size)
+test = -train
+
+
+# # rename the df to df.train, df.test, and df.vali respectively
+df.train = df[train,]
+df.test  = df[-train,]
+df.vali  = validationDf
+
+dim(df.train) # 1185 x 136
+dim(df.test)  # 509  x 136
+dim(df.vali)  # 242  x 136
+
+# these vectors are needed for the modeling results rmd
+df.train.y  = df[train,c(response)]
+df.test.y   = df[-train,c(response)]
+df.vali.y  = df.vali[,c(response)]
+
+# Model 1: Multiple Regression Model: forward 
+### MODEL 1 Forward:
+y.fullmod = paste0(response,' ~ .')
+fullmod = glm(y.fullmod,data=df.train, family=gaussian)
+summary(fullmod)
+
+y.nothing = paste0(response,' ~ 1')
+nothing <- glm(y.nothing,data=df.train, family=gaussian)
+summary(nothing)
+
+forwards = step(nothing,scope=list(lower=formula(nothing),upper=formula(fullmod)), direction="forward")
+formula(forwards)
+
+### MODEL 1 Backward
+backwards = step(fullmod) # Backwards selection is the default
+formula(backwards)
+
+### MODEL 1 Stepwise
+stepwise = step(nothing, list(lower=formula(nothing),upper=formula(fullmod)),direction="both")
+formula(stepwise)
+# <!-- ``` -->
+
+fixed = lm(NO2 ~ ., data=df.train)
+formula(fixed) 
+
+
+
+###########################################################################
+####### FORWARDS VARIABLE SELECTION MULTIPLE LINEAR REGRESSION MODEL#######
+###########################################################################
+# formula(forwards)
+# NO2 ~ lag.1.NO2 + lag.2.NO2 + X5amTo8amSlope.NOX.IMP + max.6.to.8.AM.NO2.IMP + 
+#     RHUM + lag.1.RHUM + max.6.to.8.AM.RHUM.IMP + WSPD + lag.2.WSPD + 
+#     lag.1.PM2.5 + lag.1.O3 + lag.3.SO2 + lag.5.WSPD + lag.2.NOX + 
+#     lag.1.NO + lag.2.SO2 + Year + lag.2.O3 + min.6.to.8.AM.SOLR.IMP + 
+#     TEMP + min.6.to.8.AM.TEMP.IMP + lag.3.WDIR + lag.5.TEMP + 
+#     min.6.to.8.AM.O3.IMP + min.6.to.8.AM.NO2.IMP + lag.1.WSPD + 
+#     lag.4.RAIN + max.6.to.8.AM.PM10.IMP + lag.1.PM10 + lag.2.NO + 
+#     X2amTo5amSlope.SO2.IMP + lag.2.RAIN + X2amTo5amSlope.NO.IMP + 
+#     X5amTo8amSlope.RHUM.IMP + lag.5.BP + lag.3.BP + min.6.to.8.AM.SO2.IMP + 
+#     min.6.to.8.AM.RAIN.IMP
+yhat.train  = predict(forwards, newdata=df.train)
+yhat.test   = predict(forwards, newdata=df.test)
+yhat.vali   = predict(forwards, newdata=df.vali)
+formula     = as.character(forwards$formula[3])
+responseVal = as.character(forwards$formula[2])
+
+# Calculate training error
+train.predictions=yhat.train
+error        = train.predictions-df.train.y
+mae.train    = mean(abs(error))
+mae.train   # 3.279724
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+mae.test    = mean(abs(test.error))
+mae.test    # 3.758279
+
+# Calculate validation error
+predictions.vali = yhat.vali
+vali.error <- predictions.vali-df.vali.y
+mae.vali    = mean(abs(vali.error))
+mae.vali    # 4.630221
+
+
+
+
+
+###########################################################################
+####### BACKWARDS VARIABLE SELECTION MULTIPLE LINEAR REGRESSION MODEL#######
+###########################################################################
+formula(backwards)
+# NO2 ~ Week + RHUM + TEMP + WSPD + lag.2.NO + lag.5.NO + lag.1.NO2 + 
+#     lag.2.NO2 + lag.3.NO2 + lag.5.NO2 + lag.1.NOX + lag.2.NOX + 
+#     lag.3.NOX + lag.5.NOX + lag.1.O3 + lag.2.O3 + lag.3.O3 + 
+#     lag.4.O3 + lag.5.O3 + lag.1.PM10 + lag.5.PM10 + lag.1.PM2.5 + 
+#     lag.5.PM2.5 + lag.3.SO2 + lag.3.BP + lag.5.BP + lag.4.RAIN + 
+#     lag.1.RHUM + lag.4.TEMP + lag.3.WDIR + lag.5.WDIR + lag.1.WSPD + 
+#     lag.5.WSPD + X5amTo8amSlope.NO.IMP + X5amTo8amSlope.O3.IMP + 
+#     X5amTo8amSlope.SO2.IMP + X5amTo8amSlope.TEMP.IMP + X2amTo5amSlope.NO.IMP + 
+#     X2amTo5amSlope.NOX.IMP + X2amTo5amSlope.O3.IMP + max.6.to.8.AM.NO2.IMP + 
+#     max.6.to.8.AM.NO.IMP + max.6.to.8.AM.NOX.IMP + min.6.to.8.AM.O3.IMP + 
+#     max.6.to.8.AM.PM10.IMP + min.6.to.8.AM.SO2.IMP + min.6.to.8.AM.RAIN.IMP + 
+#     max.6.to.8.AM.RHUM.IMP + max.6.to.8.AM.SOLR.IMP + min.6.to.8.AM.SOLR.IMP + 
+#     max.6.to.8.AM.TEMP.IMP
+yhat.train  = predict(backwards, newdata=df.train)
+yhat.test   = predict(backwards, newdata=df.test)
+yhat.vali   = predict(backwards, newdata=df.vali)
+
+formula     = as.character(backwards$formula[3])
+responseVal = as.character(backwards$formula[2])
+
+# Calculate training error
+train.predictions=yhat.train
+error        = train.predictions-df.train.y
+mae.train    = mean(abs(error))
+mae.train   # 3.238532
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+mae.test    = mean(abs(test.error))
+mae.test    # 3.762401
+
+# Calculate validation error
+predictions.vali = yhat.vali
+vali.error <- predictions.vali-df.vali.y
+mae.vali    = mean(abs(vali.error))
+mae.vali    # 4.788994
+
+
+
+
+
+###########################################################################
+####### STEPWISE VARIABLE SELECTION MULTIPLE LINEAR REGRESSION MODEL#######
+###########################################################################
+formula(stepwise)
+# NO2 ~ lag.1.NO2 + lag.2.NO2 + X5amTo8amSlope.NOX.IMP + max.6.to.8.AM.NO2.IMP + 
+#     RHUM + lag.1.RHUM + WSPD + lag.1.PM2.5 + lag.1.O3 + lag.3.SO2 + 
+#     lag.5.WSPD + lag.2.NOX + lag.1.NO + lag.2.SO2 + lag.2.O3 + 
+#     min.6.to.8.AM.SOLR.IMP + TEMP + min.6.to.8.AM.TEMP.IMP + 
+#     lag.3.WDIR + lag.5.TEMP + min.6.to.8.AM.O3.IMP + min.6.to.8.AM.NO2.IMP + 
+#     lag.1.WSPD + X5amTo8amSlope.RHUM.IMP + lag.4.RAIN + min.6.to.8.AM.RAIN.IMP + 
+#     lag.1.PM10 + max.6.to.8.AM.PM10.IMP + lag.2.NO + lag.5.BP + 
+#     lag.3.BP + X5amTo8amSlope.SO2.IMP + X2amTo5amSlope.NO.IMP + 
+#     Month
+yhat.train  = predict(stepwise, newdata=df.train)
+yhat.test   = predict(stepwise, newdata=df.test)
+yhat.vali   = predict(stepwise, newdata=df.vali)
+formula     = as.character(stepwise$formula[3])
+responseVal = as.character(stepwise$formula[2])
+
+# Calculate training error
+train.predictions=yhat.train
+error        = train.predictions-df.train.y
+mae.train    = mean(abs(error))
+mae.train   # 3.289878
+
+# Calculate testing error
+predictions.test = yhat.test
+test.error <- predictions.test-df.test.y
+mae.test    = mean(abs(test.error))
+mae.test    # 3.671706
+
+# Calculate validation error
+predictions.vali = yhat.vali
+vali.error <- predictions.vali-df.vali.y
+mae.vali    = mean(abs(vali.error))
+mae.vali    # 4.736682
+
+
+```
+
+
+
+
+
